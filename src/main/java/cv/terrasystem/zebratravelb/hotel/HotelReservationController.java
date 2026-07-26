@@ -66,6 +66,9 @@ public class HotelReservationController {
     public ReservationDto create(@AuthenticationPrincipal UserPrincipal principal, @RequestBody CreateReservationRequest request) {
         HotelRoom room = requireRoom(request.roomId());
         validateDates(request.checkIn(), request.checkOut());
+        if (request.checkIn().isBefore(LocalDate.now())) {
+            throw new BadRequestException("A data de check-in não pode ser no passado");
+        }
         ensureAvailable(room, request.checkIn(), request.checkOut(), null);
         validatePaymentMethod(request.paymentMethod());
 

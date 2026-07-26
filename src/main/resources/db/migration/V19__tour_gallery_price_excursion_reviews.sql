@@ -1,0 +1,12 @@
+ALTER TABLE tours ADD COLUMN images TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE tours ADD COLUMN price NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS excursion_reviews (
+    id SERIAL PRIMARY KEY,
+    excursion_id INTEGER NOT NULL REFERENCES excursions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (excursion_id, user_id)
+);
