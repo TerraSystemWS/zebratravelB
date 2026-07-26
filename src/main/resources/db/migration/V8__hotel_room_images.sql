@@ -1,0 +1,1 @@
+ALTER TABLE hotel_rooms ADD COLUMN images TEXT[] NOT NULL DEFAULT '{}';
