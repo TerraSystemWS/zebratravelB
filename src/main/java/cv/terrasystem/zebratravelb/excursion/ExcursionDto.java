@@ -26,6 +26,8 @@ public record ExcursionDto(
         );
     }
 
+    // rating/reviews are aggregated from real ExcursionReview submissions
+    // (see ExcursionReviewController) and must not be settable from here.
     public void applyTo(Excursion e) {
         e.setSlug(slug);
         e.setTitle(title);
@@ -33,8 +35,6 @@ public record ExcursionDto(
         e.setPrice(price);
         e.setDuration(duration);
         e.setLocation(location);
-        e.setRating(rating != null ? rating : BigDecimal.ZERO);
-        e.setReviews(reviews != null ? reviews : 0);
         e.setDescription(description);
         e.setCategories(categories != null ? categories.toArray(new String[0]) : new String[0]);
     }

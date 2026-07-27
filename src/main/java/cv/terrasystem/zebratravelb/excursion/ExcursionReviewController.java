@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @RestController
@@ -46,6 +48,18 @@ public class ExcursionReviewController {
         review.setUser(principal.getUser());
         review.setRating(request.rating());
         review.setComment(request.comment());
-        return ExcursionReviewDto.from(reviewRepository.save(review));
+        ExcursionReview saved = reviewRepository.save(review);
+
+        updateAggregateRating(excursion, slug);
+
+        return ExcursionReviewDto.from(saved);
+    }
+
+    private void updateAggregateRating(Excursion excursion, String slug) {
+        double average = reviewRepository.findAverageRatingByExcursion_Slug(slug).orElse(0.0);
+        long count = reviewRepository.countByExcursion_Slug(slug);
+        excursion.setRating(BigDecimal.valueOf(average).setScale(1, RoundingMode.HALF_UP));
+        excursion.setReviews((int) count);
+        excursionRepository.save(excursion);
     }
 }
