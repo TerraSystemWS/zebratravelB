@@ -23,6 +23,13 @@ public class HotelRoom {
     @JoinColumn(name = "room_type_id", nullable = false)
     private HotelRoomType roomType;
 
+    // Denormalized from roomType.hotel — lets the DB enforce "room code unique per
+    // hotel" (a UNIQUE constraint can't reach across the room_type_id join), mirroring
+    // the same pattern already used by HotelReservation.hotel_id.
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "hotel_id", nullable = false)
+    private Hotel hotel;
+
     @Column(name = "room_number", nullable = false)
     private String roomNumber;
 

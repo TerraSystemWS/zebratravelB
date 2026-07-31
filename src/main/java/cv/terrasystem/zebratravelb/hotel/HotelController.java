@@ -114,8 +114,12 @@ public class HotelController {
     public RoomDto createRoom(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer roomTypeId, @RequestBody RoomDto dto) {
         HotelRoomType rt = roomTypeRepository.findById(roomTypeId)
                 .orElseThrow(() -> new NotFoundException("Tipo de quarto não encontrado: " + roomTypeId));
+        if (roomRepository.existsByHotel_IdAndRoomNumberIgnoreCase(rt.getHotel().getId(), dto.roomNumber())) {
+            throw new BadRequestException("Já existe um quarto com o código \"" + dto.roomNumber() + "\" neste hotel");
+        }
         HotelRoom room = new HotelRoom();
         room.setRoomType(rt);
+        room.setHotel(rt.getHotel());
         dto.applyTo(room);
         room.setCreatedBy(principal.getUser());
         return RoomDto.from(roomRepository.save(room));
@@ -126,6 +130,9 @@ public class HotelController {
     public RoomDto updateRoom(@PathVariable Integer id, @RequestBody RoomDto dto) {
         HotelRoom room = roomRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Quarto não encontrado: " + id));
+        if (roomRepository.existsByHotel_IdAndRoomNumberIgnoreCaseAndIdNot(room.getHotel().getId(), dto.roomNumber(), id)) {
+            throw new BadRequestException("Já existe um quarto com o código \"" + dto.roomNumber() + "\" neste hotel");
+        }
         dto.applyTo(room);
         return RoomDto.from(roomRepository.save(room));
     }
