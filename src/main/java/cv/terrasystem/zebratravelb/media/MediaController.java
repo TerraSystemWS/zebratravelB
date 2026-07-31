@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +26,7 @@ public class MediaController {
 
     private final MediaFolderRepository folderRepository;
     private final MediaItemRepository itemRepository;
+    private final WebpConverter webpConverter;
 
     @Value("${app.media.upload-dir}")
     private String uploadDir;
@@ -92,19 +92,32 @@ public class MediaController {
 
         String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "ficheiro";
         String extension = original.contains(".") ? original.substring(original.lastIndexOf('.')) : "";
+        String contentType = file.getContentType();
+        byte[] bytes = file.getBytes();
+
+        // Images (other than SVG, already-webp, or unsupported formats) get converted to
+        // WebP here — smaller files, same visual result. Falls back to storing the
+        // original bytes untouched if conversion isn't applicable or fails for any reason.
+        WebpConverter.Result converted = webpConverter.convert(bytes, contentType);
+        if (converted != null) {
+            bytes = converted.bytes();
+            extension = converted.extension();
+            contentType = converted.contentType();
+        }
+
         String stored = UUID.randomUUID() + extension;
 
         Path target = dir.resolve(stored).normalize();
         if (!target.startsWith(dir.normalize())) {
             throw new BadRequestException("Nome de ficheiro inválido");
         }
-        Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+        Files.write(target, bytes);
 
         MediaItem item = new MediaItem();
         item.setOriginalFilename(original);
         item.setStoredFilename(stored);
-        item.setContentType(file.getContentType());
-        item.setSizeBytes(file.getSize());
+        item.setContentType(contentType);
+        item.setSizeBytes((long) bytes.length);
         if (folderId != null) {
             item.setFolder(folderRepository.findById(folderId)
                     .orElseThrow(() -> new NotFoundException("Pasta não encontrada: " + folderId)));
