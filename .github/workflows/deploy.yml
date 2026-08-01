@@ -1,0 +1,57 @@
+name: Deploy backend to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build with Maven
+        run: ./mvnw -q -B package -DskipTests
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy JAR to server
+        run: |
+          JAR_FILE=$(find target -maxdepth 1 -name "*.jar" ! -name "*.jar.original")
+          scp -i ~/.ssh/deploy_key "$JAR_FILE" "${{ secrets.USERNAME }}@${{ secrets.HOST }}:${{ secrets.TARGET_PATH }}"
+
+      - name: Restart app on server
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.USERNAME }}@${{ secrets.HOST }}" "sudo systemctl restart zebratravel-api"
+
+      - name: Wait for health check
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.USERNAME }}@${{ secrets.HOST }}" '
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+                echo "App is up"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "App did not become healthy in time"
+            sudo journalctl -u zebratravel-api --no-pager -n 60
+            exit 1
+          '
