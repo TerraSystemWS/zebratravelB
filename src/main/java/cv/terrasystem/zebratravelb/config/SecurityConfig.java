@@ -84,7 +84,16 @@ public class SecurityConfig {
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
+        // O callback da SISP/Vinti4 é chamado a partir do domínio deles, não do nosso frontend -
+        // não pode ficar preso à allowlist de origens do site (senão a resposta do pagamento nunca chega, 403).
+        CorsConfiguration paymentCallbackConfig = new CorsConfiguration();
+        paymentCallbackConfig.setAllowedOriginPatterns(List.of("*"));
+        paymentCallbackConfig.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        paymentCallbackConfig.setAllowedHeaders(List.of("*"));
+        paymentCallbackConfig.setAllowCredentials(false);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/payments/vinti4/callback", paymentCallbackConfig);
         source.registerCorsConfiguration("/**", config);
         return source;
     }
