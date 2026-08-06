@@ -13,4 +13,7 @@ public interface ExcursionReviewRepository extends JpaRepository<ExcursionReview
 
     @Query("select avg(r.rating) from ExcursionReview r where r.excursion.slug = :slug")
     Optional<Double> findAverageRatingByExcursion_Slug(String slug);
+
+    @Query("select coalesce(sum(r.rating), 0) from ExcursionReview r")
+    long sumRating();
 }

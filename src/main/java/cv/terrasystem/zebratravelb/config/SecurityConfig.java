@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.config;
 
 import cv.terrasystem.zebratravelb.security.JwtAuthFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -71,6 +72,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll()
                         .anyRequest().authenticated()
                 )
+                // Sem isto, o Spring Security usa o Http403ForbiddenEntryPoint por omissão para pedidos sem
+                // autenticação válida (token em falta/inválido/expirado) - devolve 403 igual a um @PreAuthorize
+                // a bloquear por falta de role, e o frontend não consegue distinguir "sessão expirada" de
+                // "não tens permissão para isto". Com isto, falta de autenticação passa a ser sempre 401.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) ->
+                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Não autenticado")))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

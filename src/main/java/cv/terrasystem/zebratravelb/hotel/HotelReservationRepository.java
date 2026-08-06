@@ -4,7 +4,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,4 +31,12 @@ public interface HotelReservationRepository extends JpaRepository<HotelReservati
     Optional<HotelReservation> findByMerchantRef(String merchantRef);
 
     boolean existsByRoom_IdAndUser_IdAndStatusIn(Integer roomId, Integer userId, List<String> statuses);
+
+    @Query("""
+            select coalesce(sum(r.totalAmount), 0) from HotelReservation r
+            where r.status in :statuses and r.createdAt between :start and :end
+            """)
+    BigDecimal sumRevenue(@Param("statuses") List<String> statuses,
+                          @Param("start") LocalDateTime start,
+                          @Param("end") LocalDateTime end);
 }
