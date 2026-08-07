@@ -55,6 +55,9 @@ public class Excursion {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    @Column(nullable = false)
+    private String status = "ACTIVE";
+
     @PrePersist
     void onCreate() {
         createdAt = LocalDateTime.now();

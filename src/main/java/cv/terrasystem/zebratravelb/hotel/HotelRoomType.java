@@ -45,6 +45,9 @@ public class HotelRoomType {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(nullable = false)
+    private String status = "ACTIVE";
+
     @PrePersist
     void onCreate() {
         createdAt = LocalDateTime.now();

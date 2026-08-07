@@ -12,7 +12,8 @@ public record PostDto(
         String category,
         String description,
         String slug,
-        Integer createdById
+        Integer createdById,
+        String status
 ) {
     public static PostDto from(Post p) {
         return new PostDto(
@@ -21,7 +22,8 @@ public record PostDto(
                 p.getDate(), p.getImage(), p.getContent(),
                 p.getCategory() != null ? p.getCategory().getName() : null,
                 p.getDescription(), p.getSlug(),
-                p.getCreatedBy() != null ? p.getCreatedBy().getId() : null
+                p.getCreatedBy() != null ? p.getCreatedBy().getId() : null,
+                p.getStatus()
         );
     }
 }

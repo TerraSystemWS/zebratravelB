@@ -19,8 +19,11 @@ public class GalleryController {
     private final GalleryCategoryRepository galleryCategoryRepository;
 
     @GetMapping
-    public List<GalleryItemDto> getAll() {
-        return galleryItemRepository.findAll().stream().map(GalleryItemDto::from).toList();
+    public List<GalleryItemDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return galleryItemRepository.findAll().stream()
+                .filter(g -> includeArchived || !"ARCHIVED".equals(g.getStatus()))
+                .map(GalleryItemDto::from)
+                .toList();
     }
 
     @PostMapping
@@ -50,6 +53,24 @@ public class GalleryController {
         }
         galleryItemRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/archive")
+    @PreAuthorize("hasRole('ADMIN')")
+    public GalleryItemDto archive(@PathVariable Integer id) {
+        GalleryItem item = galleryItemRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Imagem não encontrada: " + id));
+        item.setStatus("ARCHIVED");
+        return GalleryItemDto.from(galleryItemRepository.save(item));
+    }
+
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    public GalleryItemDto restore(@PathVariable Integer id) {
+        GalleryItem item = galleryItemRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Imagem não encontrada: " + id));
+        item.setStatus("ACTIVE");
+        return GalleryItemDto.from(galleryItemRepository.save(item));
     }
 
     private Set<GalleryCategory> resolveCategories(List<String> names) {

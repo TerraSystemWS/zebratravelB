@@ -21,8 +21,11 @@ public class PostController {
     private final PostCategoryRepository postCategoryRepository;
 
     @GetMapping
-    public List<PostDto> getAll() {
-        return postRepository.findAll().stream().map(PostDto::from).toList();
+    public List<PostDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return postRepository.findAll().stream()
+                .filter(p -> includeArchived || !"ARCHIVED".equals(p.getStatus()))
+                .map(PostDto::from)
+                .toList();
     }
 
     @GetMapping("/{slug}")
@@ -55,6 +58,24 @@ public class PostController {
         OwnershipGuard.requireOwnerOrAdmin(principal, post.getCreatedBy());
         postRepository.delete(post);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public PostDto archive(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        Post post = postRepository.findById(id).orElseThrow(() -> new NotFoundException("Post não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, post.getCreatedBy());
+        post.setStatus("ARCHIVED");
+        return PostDto.from(postRepository.save(post));
+    }
+
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public PostDto restore(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        Post post = postRepository.findById(id).orElseThrow(() -> new NotFoundException("Post não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, post.getCreatedBy());
+        post.setStatus("ACTIVE");
+        return PostDto.from(postRepository.save(post));
     }
 
     private Post find(String slug) {

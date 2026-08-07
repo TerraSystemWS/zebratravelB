@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Integer> {
     List<Order> findByUser_IdOrderByCreatedAtDesc(Integer userId);
     Optional<Order> findByMerchantRef(String merchantRef);
+    boolean existsByUser_Id(Integer userId);
 }

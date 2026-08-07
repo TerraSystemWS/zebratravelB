@@ -10,12 +10,14 @@ public record RoomTypeDto(
         BigDecimal basePrice,
         Integer capacity,
         String image,
-        Integer createdBy
+        Integer createdBy,
+        String status
 ) {
     public static RoomTypeDto from(HotelRoomType rt) {
         return new RoomTypeDto(
                 rt.getId(), rt.getHotel().getId(), rt.getName(), rt.getDescription(), rt.getBasePrice(), rt.getCapacity(), rt.getImage(),
-                rt.getCreatedBy() != null ? rt.getCreatedBy().getId() : null
+                rt.getCreatedBy() != null ? rt.getCreatedBy().getId() : null,
+                rt.getStatus()
         );
     }
 

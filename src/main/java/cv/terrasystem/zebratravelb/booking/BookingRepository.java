@@ -11,6 +11,9 @@ import java.util.List;
 public interface BookingRepository extends JpaRepository<Booking, Integer> {
     List<Booking> findByUserId(Integer userId);
     boolean existsByExcursion_SlugAndUser_IdAndStatusIn(String slug, Integer userId, List<String> statuses);
+    boolean existsByExcursion_Id(Integer excursionId);
+    boolean existsByTour_Id(Integer tourId);
+    boolean existsByUserId(Integer userId);
 
     @Query("""
             select coalesce(sum(b.amount), 0) from Booking b

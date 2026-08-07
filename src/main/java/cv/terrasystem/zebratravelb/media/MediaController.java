@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.media;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
+import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class MediaController {
     private final MediaFolderRepository folderRepository;
     private final MediaItemRepository itemRepository;
     private final WebpConverter webpConverter;
+    private final MediaUsageChecker usageChecker;
 
     @Value("${app.media.upload-dir}")
     private String uploadDir;
@@ -131,6 +133,10 @@ public class MediaController {
     public ResponseEntity<Void> deleteItem(@PathVariable Integer id) {
         MediaItem item = itemRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Ficheiro não encontrado: " + id));
+        List<String> usages = usageChecker.findUsages(item.getStoredFilename());
+        if (!usages.isEmpty()) {
+            throw new ConflictException("Ficheiro em uso, não é possível apagar.", usages);
+        }
         try {
             Files.deleteIfExists(Paths.get(uploadDir).resolve(item.getStoredFilename()));
         } catch (IOException ignored) {

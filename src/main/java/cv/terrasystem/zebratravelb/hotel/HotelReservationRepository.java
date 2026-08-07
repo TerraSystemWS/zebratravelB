@@ -31,6 +31,10 @@ public interface HotelReservationRepository extends JpaRepository<HotelReservati
     Optional<HotelReservation> findByMerchantRef(String merchantRef);
 
     boolean existsByRoom_IdAndUser_IdAndStatusIn(Integer roomId, Integer userId, List<String> statuses);
+    boolean existsByHotel_Id(Integer hotelId);
+    boolean existsByRoom_RoomType_Id(Integer roomTypeId);
+    boolean existsByRoom_Id(Integer roomId);
+    boolean existsByUser_Id(Integer userId);
 
     @Query("""
             select coalesce(sum(r.totalAmount), 0) from HotelReservation r

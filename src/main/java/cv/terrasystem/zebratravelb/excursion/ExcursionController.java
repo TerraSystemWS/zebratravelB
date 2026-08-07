@@ -1,5 +1,7 @@
 package cv.terrasystem.zebratravelb.excursion;
 
+import cv.terrasystem.zebratravelb.booking.BookingRepository;
+import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.common.OwnershipGuard;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -17,10 +19,15 @@ import java.util.List;
 public class ExcursionController {
 
     private final ExcursionRepository excursionRepository;
+    private final BookingRepository bookingRepository;
+    private final ExcursionReviewRepository excursionReviewRepository;
 
     @GetMapping
-    public List<ExcursionDto> getAll() {
-        return excursionRepository.findAll().stream().map(ExcursionDto::from).toList();
+    public List<ExcursionDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return excursionRepository.findAll().stream()
+                .filter(e -> includeArchived || !"ARCHIVED".equals(e.getStatus()))
+                .map(ExcursionDto::from)
+                .toList();
     }
 
     @GetMapping("/{slug}")
@@ -51,8 +58,29 @@ public class ExcursionController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
         Excursion excursion = find(slug);
         OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
+        if (bookingRepository.existsByExcursion_Id(excursion.getId()) || excursionReviewRepository.existsByExcursion_Id(excursion.getId())) {
+            throw new ConflictException("Não é possível apagar: existem reservas ou avaliações associadas a esta excursão. Arquive em vez de apagar.");
+        }
         excursionRepository.delete(excursion);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{slug}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public ExcursionDto archive(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
+        Excursion excursion = find(slug);
+        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
+        excursion.setStatus("ARCHIVED");
+        return ExcursionDto.from(excursionRepository.save(excursion));
+    }
+
+    @PostMapping("/{slug}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public ExcursionDto restore(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
+        Excursion excursion = find(slug);
+        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
+        excursion.setStatus("ACTIVE");
+        return ExcursionDto.from(excursionRepository.save(excursion));
     }
 
     private Excursion find(String slug) {

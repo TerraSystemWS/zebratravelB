@@ -29,4 +29,7 @@ public class GalleryItem {
             inverseJoinColumns = @JoinColumn(name = "category_id")
     )
     private Set<GalleryCategory> categories = new HashSet<>();
+
+    @Column(nullable = false)
+    private String status = "ACTIVE";
 }

@@ -14,7 +14,8 @@ public record TourDto(
         List<String> category,
         Integer tours,
         String description,
-        Integer createdById
+        Integer createdById,
+        String status
 ) {
     public static TourDto from(Tour tour) {
         return new TourDto(
@@ -26,7 +27,8 @@ public record TourDto(
                 tour.getCategories().stream().map(Category::getName).collect(Collectors.toList()),
                 tour.getToursCount(),
                 tour.getDescription(),
-                tour.getCreatedBy() != null ? tour.getCreatedBy().getId() : null
+                tour.getCreatedBy() != null ? tour.getCreatedBy().getId() : null,
+                tour.getStatus()
         );
     }
 

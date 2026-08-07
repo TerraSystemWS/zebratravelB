@@ -9,4 +9,5 @@ public interface FavoriteProductRepository extends JpaRepository<FavoriteProduct
     List<FavoriteProduct> findByUserId(Integer userId);
     Optional<FavoriteProduct> findByUserIdAndProductId(Integer userId, Integer productId);
     void deleteByUserIdAndProductId(Integer userId, Integer productId);
+    boolean existsByProductId(Integer productId);
 }

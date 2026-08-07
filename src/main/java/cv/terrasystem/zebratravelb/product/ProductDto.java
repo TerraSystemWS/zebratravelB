@@ -10,14 +10,16 @@ public record ProductDto(
         String link,
         String category,
         Integer stockQuantity,
-        Integer createdById
+        Integer createdById,
+        String status
 ) {
     public static ProductDto from(Product p) {
         return new ProductDto(
                 p.getId(), p.getTitle(), p.getPrice(), p.getImageUrl(), p.getLink(),
                 p.getCategory() != null ? p.getCategory().getName() : null,
                 p.getStockQuantity(),
-                p.getCreatedBy() != null ? p.getCreatedBy().getId() : null
+                p.getCreatedBy() != null ? p.getCreatedBy().getId() : null,
+                p.getStatus()
         );
     }
 }

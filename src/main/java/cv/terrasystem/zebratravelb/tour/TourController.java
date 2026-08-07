@@ -1,5 +1,7 @@
 package cv.terrasystem.zebratravelb.tour;
 
+import cv.terrasystem.zebratravelb.booking.BookingRepository;
+import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.common.OwnershipGuard;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -20,10 +22,14 @@ public class TourController {
 
     private final TourRepository tourRepository;
     private final CategoryRepository categoryRepository;
+    private final BookingRepository bookingRepository;
 
     @GetMapping
-    public List<TourDto> getAll() {
-        return tourRepository.findAll().stream().map(TourDto::from).toList();
+    public List<TourDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return tourRepository.findAll().stream()
+                .filter(t -> includeArchived || !"ARCHIVED".equals(t.getStatus()))
+                .map(TourDto::from)
+                .toList();
     }
 
     @GetMapping("/{id}")
@@ -57,8 +63,29 @@ public class TourController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
         Tour tour = find(id);
         OwnershipGuard.requireOwnerOrAdmin(principal, tour.getCreatedBy());
+        if (bookingRepository.existsByTour_Id(tour.getId())) {
+            throw new ConflictException("Não é possível apagar: existem reservas associadas a este tour. Arquive em vez de apagar.");
+        }
         tourRepository.delete(tour);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public TourDto archive(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        Tour tour = find(id);
+        OwnershipGuard.requireOwnerOrAdmin(principal, tour.getCreatedBy());
+        tour.setStatus("ARCHIVED");
+        return TourDto.from(tourRepository.save(tour));
+    }
+
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public TourDto restore(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        Tour tour = find(id);
+        OwnershipGuard.requireOwnerOrAdmin(principal, tour.getCreatedBy());
+        tour.setStatus("ACTIVE");
+        return TourDto.from(tourRepository.save(tour));
     }
 
     private Tour find(Integer id) {

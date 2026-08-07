@@ -10,6 +10,8 @@ public interface ExcursionReviewRepository extends JpaRepository<ExcursionReview
     List<ExcursionReview> findByExcursion_SlugOrderByCreatedAtDesc(String slug);
     boolean existsByExcursion_SlugAndUser_Id(String slug, Integer userId);
     long countByExcursion_Slug(String slug);
+    boolean existsByExcursion_Id(Integer excursionId);
+    boolean existsByUser_Id(Integer userId);
 
     @Query("select avg(r.rating) from ExcursionReview r where r.excursion.slug = :slug")
     Optional<Double> findAverageRatingByExcursion_Slug(String slug);

@@ -1,7 +1,13 @@
 package cv.terrasystem.zebratravelb.user;
 
+import cv.terrasystem.zebratravelb.booking.BookingRepository;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.excursion.ExcursionReviewRepository;
+import cv.terrasystem.zebratravelb.hotel.HotelReservationRepository;
+import cv.terrasystem.zebratravelb.hotel.HotelRoomReviewRepository;
+import cv.terrasystem.zebratravelb.order.OrderRepository;
+import cv.terrasystem.zebratravelb.post.AuthorRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -9,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -19,6 +26,12 @@ public class UserController {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final BookingRepository bookingRepository;
+    private final HotelReservationRepository hotelReservationRepository;
+    private final OrderRepository orderRepository;
+    private final ExcursionReviewRepository excursionReviewRepository;
+    private final HotelRoomReviewRepository hotelRoomReviewRepository;
+    private final AuthorRepository authorRepository;
 
     @GetMapping
     public List<UserDto> getAll() {
@@ -61,12 +74,30 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Integer id) {
-        if (!userRepository.existsById(id)) {
-            throw new NotFoundException("User not found: " + id);
+    public DeleteUserResponse delete(@PathVariable Integer id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found: " + id));
+
+        boolean hasDependents = bookingRepository.existsByUserId(id)
+                || hotelReservationRepository.existsByUser_Id(id)
+                || orderRepository.existsByUser_Id(id)
+                || excursionReviewRepository.existsByUser_Id(id)
+                || hotelRoomReviewRepository.existsByUser_Id(id)
+                || authorRepository.existsByUser_Id(id);
+
+        if (!hasDependents) {
+            userRepository.deleteById(id);
+            return new DeleteUserResponse(true);
         }
-        userRepository.deleteById(id);
-        return ResponseEntity.noContent().build();
+
+        user.setUsername("deleted-user-" + id);
+        user.setEmail("deleted-" + id + "@zebratravel.invalid");
+        user.setFullName("Utilizador removido");
+        user.setPhone(null);
+        user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setStatus("ANONYMIZED");
+        userRepository.save(user);
+        return new DeleteUserResponse(false);
     }
 
     private Role resolveRole(String name) {

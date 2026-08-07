@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface HotelRoomTypeRepository extends JpaRepository<HotelRoomType, Integer> {
     List<HotelRoomType> findByHotel_Id(Integer hotelId);
+    List<HotelRoomType> findByImageContaining(String needle);
 }

@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.hotel;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
+import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.common.OwnershipGuard;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -26,8 +27,11 @@ public class HotelController {
     // ---- Hotels ---------------------------------------------------------
 
     @GetMapping("/api/hotels")
-    public List<HotelDto> getHotels() {
-        return hotelRepository.findAll().stream().map(HotelDto::from).toList();
+    public List<HotelDto> getHotels(@RequestParam(defaultValue = "false") boolean includeArchived) {
+        return hotelRepository.findAll().stream()
+                .filter(h -> includeArchived || !"ARCHIVED".equals(h.getStatus()))
+                .map(HotelDto::from)
+                .toList();
     }
 
     @GetMapping("/api/hotels/{id}")
@@ -55,15 +59,37 @@ public class HotelController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteHotel(@PathVariable Integer id) {
         if (!hotelRepository.existsById(id)) throw new NotFoundException("Hotel não encontrado: " + id);
+        if (reservationRepository.existsByHotel_Id(id)) {
+            throw new ConflictException("Não é possível apagar: existem reservas associadas a este hotel. Arquive em vez de apagar.");
+        }
         hotelRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/hotels/{id}/archive")
+    @PreAuthorize("hasRole('ADMIN')")
+    public HotelDto archiveHotel(@PathVariable Integer id) {
+        Hotel hotel = findHotel(id);
+        hotel.setStatus("ARCHIVED");
+        return HotelDto.from(hotelRepository.save(hotel));
+    }
+
+    @PostMapping("/api/hotels/{id}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    public HotelDto restoreHotel(@PathVariable Integer id) {
+        Hotel hotel = findHotel(id);
+        hotel.setStatus("ACTIVE");
+        return HotelDto.from(hotelRepository.save(hotel));
     }
 
     // ---- Room types -------------------------------------------------------
 
     @GetMapping("/api/hotels/{hotelId}/room-types")
-    public List<RoomTypeDto> getRoomTypes(@PathVariable Integer hotelId) {
-        return roomTypeRepository.findByHotel_Id(hotelId).stream().map(RoomTypeDto::from).toList();
+    public List<RoomTypeDto> getRoomTypes(@PathVariable Integer hotelId, @RequestParam(defaultValue = "false") boolean includeArchived) {
+        return roomTypeRepository.findByHotel_Id(hotelId).stream()
+                .filter(rt -> includeArchived || !"ARCHIVED".equals(rt.getStatus()))
+                .map(RoomTypeDto::from)
+                .toList();
     }
 
     @PostMapping("/api/hotels/{hotelId}/room-types")
@@ -97,16 +123,42 @@ public class HotelController {
         HotelRoomType rt = roomTypeRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Tipo de quarto não encontrado: " + id));
         OwnershipGuard.requireOwnerOrAdmin(principal, rt.getCreatedBy());
+        if (reservationRepository.existsByRoom_RoomType_Id(id)) {
+            throw new ConflictException("Não é possível apagar: existem reservas associadas a quartos deste tipo. Arquive em vez de apagar.");
+        }
         roomTypeRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/room-types/{id}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public RoomTypeDto archiveRoomType(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        HotelRoomType rt = roomTypeRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Tipo de quarto não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, rt.getCreatedBy());
+        rt.setStatus("ARCHIVED");
+        return RoomTypeDto.from(roomTypeRepository.save(rt));
+    }
+
+    @PostMapping("/api/room-types/{id}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public RoomTypeDto restoreRoomType(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        HotelRoomType rt = roomTypeRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Tipo de quarto não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, rt.getCreatedBy());
+        rt.setStatus("ACTIVE");
+        return RoomTypeDto.from(roomTypeRepository.save(rt));
     }
 
     // ---- Rooms --------------------------------------------------------------
 
     @GetMapping("/api/room-types/{roomTypeId}/rooms")
     @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
-    public List<RoomDto> getRooms(@PathVariable Integer roomTypeId) {
-        return roomRepository.findByRoomType_Id(roomTypeId).stream().map(RoomDto::from).toList();
+    public List<RoomDto> getRooms(@PathVariable Integer roomTypeId, @RequestParam(defaultValue = "false") boolean includeArchived) {
+        return roomRepository.findByRoomType_Id(roomTypeId).stream()
+                .filter(r -> includeArchived || !"ARCHIVED".equals(r.getStatus()))
+                .map(RoomDto::from)
+                .toList();
     }
 
     @PostMapping("/api/room-types/{roomTypeId}/rooms")
@@ -133,6 +185,9 @@ public class HotelController {
         if (roomRepository.existsByHotel_IdAndRoomNumberIgnoreCaseAndIdNot(room.getHotel().getId(), dto.roomNumber(), id)) {
             throw new BadRequestException("Já existe um quarto com o código \"" + dto.roomNumber() + "\" neste hotel");
         }
+        if ("ARCHIVED".equalsIgnoreCase(dto.status())) {
+            throw new BadRequestException("Use o endpoint /archive para arquivar o quarto");
+        }
         dto.applyTo(room);
         return RoomDto.from(roomRepository.save(room));
     }
@@ -143,8 +198,31 @@ public class HotelController {
         HotelRoom room = roomRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Quarto não encontrado: " + id));
         OwnershipGuard.requireOwnerOrAdmin(principal, room.getCreatedBy());
+        if (reservationRepository.existsByRoom_Id(id)) {
+            throw new ConflictException("Não é possível apagar: existem reservas associadas a este quarto. Arquive em vez de apagar.");
+        }
         roomRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/rooms/{id}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public RoomDto archiveRoom(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        HotelRoom room = roomRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Quarto não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, room.getCreatedBy());
+        room.setStatus("ARCHIVED");
+        return RoomDto.from(roomRepository.save(room));
+    }
+
+    @PostMapping("/api/rooms/{id}/restore")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public RoomDto restoreRoom(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        HotelRoom room = roomRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Quarto não encontrado: " + id));
+        OwnershipGuard.requireOwnerOrAdmin(principal, room.getCreatedBy());
+        room.setStatus("ACTIVE");
+        return RoomDto.from(roomRepository.save(room));
     }
 
     // ---- Public per-room browsing ------------------------------------------

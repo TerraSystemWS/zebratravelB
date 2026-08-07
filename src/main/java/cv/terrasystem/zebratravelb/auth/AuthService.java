@@ -53,6 +53,10 @@ public class AuthService {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new BadRequestException("Credenciais inválidas"));
 
+        if ("ANONYMIZED".equals(user.getStatus())) {
+            throw new BadRequestException("Esta conta foi removida");
+        }
+
         return buildResponse(user);
     }
 
