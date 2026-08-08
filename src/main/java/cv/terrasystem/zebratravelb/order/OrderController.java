@@ -6,11 +6,13 @@ import cv.terrasystem.zebratravelb.product.Product;
 import cv.terrasystem.zebratravelb.product.ProductRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @RestController
@@ -19,6 +21,7 @@ import java.util.Set;
 public class OrderController {
 
     private static final Set<String> PAYMENT_METHODS = Set.of(Order.ONLINE, Order.TRANSFER, Order.CASH);
+    private static final Set<String> FULFILLMENT_STATUSES = Set.of(Order.PENDING_SHIPMENT, Order.SHIPPED, Order.DELIVERED);
 
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
@@ -28,6 +31,32 @@ public class OrderController {
         return orderRepository.findByUser_IdOrderByCreatedAtDesc(principal.getId()).stream()
                 .map(OrderDto::from)
                 .toList();
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public List<OrderDto> getAll() {
+        return orderRepository.findAll().stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(OrderDto::from)
+                .toList();
+    }
+
+    @PatchMapping("/{id}/fulfillment-status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public OrderDto updateFulfillmentStatus(@PathVariable Integer id, @RequestBody Map<String, String> body) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Encomenda não encontrada: " + id));
+        String fulfillmentStatus = body.get("fulfillmentStatus");
+        if (fulfillmentStatus == null || !FULFILLMENT_STATUSES.contains(fulfillmentStatus.toUpperCase())) {
+            throw new BadRequestException("fulfillmentStatus inválido: " + fulfillmentStatus);
+        }
+        // Não exigimos status == PAID: encomendas TRANSFER/CASH não têm hoje nenhum
+        // endpoint para serem marcadas como pagas manualmente (limitação conhecida,
+        // ver dev-notes.md secção 4) — bloquear aqui deixaria o envio delas impossível
+        // de sempre. O admin decide quando faz sentido tratar o envio.
+        order.setFulfillmentStatus(fulfillmentStatus.toUpperCase());
+        return OrderDto.from(orderRepository.save(order));
     }
 
     @GetMapping("/{id}")

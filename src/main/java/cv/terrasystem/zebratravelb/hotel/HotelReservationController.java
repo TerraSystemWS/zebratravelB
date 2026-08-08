@@ -130,10 +130,17 @@ public class HotelReservationController {
     public ReservationDto updateStatus(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id, @RequestBody Map<String, String> body) {
         HotelReservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
+        requireNotCheckedOut(reservation);
         String status = body.get("status");
         validateAdminSettableStatus(principal, status);
         reservation.setStatus(status.toUpperCase());
         return ReservationDto.from(reservationRepository.save(reservation));
+    }
+
+    private void requireNotCheckedOut(HotelReservation reservation) {
+        if (reservation.getCheckedOutAt() != null) {
+            throw new BadRequestException("Esta reserva já teve check-out — não há mais operações possíveis sobre ela");
+        }
     }
 
     private void validateAdminSettableStatus(UserPrincipal principal, String status) {
@@ -151,6 +158,7 @@ public class HotelReservationController {
     public ReservationDto moveDates(@PathVariable Integer id, @RequestBody Map<String, String> body) {
         HotelReservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
+        requireNotCheckedOut(reservation);
         if (reservation.getRoom() == null) {
             throw new BadRequestException("Esta reserva não tem quarto associado");
         }

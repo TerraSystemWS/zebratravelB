@@ -41,14 +41,10 @@ public class Booking {
     @Column(name = "booking_date", nullable = false)
     private LocalDate bookingDate;
 
+    // "CONFIRMED" já significa "confirmada e paga" — mesmo padrão simplificado
+    // usado em HotelReservation (ver Booking.java history / dev-notes secção 3).
     @Column(nullable = false)
     private String status = "PENDING";
-
-    // Separado de `status` (workflow: pendente/confirmada/cancelada) — responde só
-    // à pergunta "esta reserva já foi paga?", já que Excursion/Tour não têm pagamento
-    // online integrado hoje (ao contrário de Hotel/Loja), é o admin/agente que marca.
-    @Column(name = "payment_status", nullable = false)
-    private String paymentStatus = "UNPAID";
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;

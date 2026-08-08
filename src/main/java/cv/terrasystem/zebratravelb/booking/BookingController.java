@@ -86,16 +86,4 @@ public class BookingController {
         return BookingDto.from(bookingRepository.save(booking));
     }
 
-    @PatchMapping("/{id}/payment-status")
-    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
-    public BookingDto updatePaymentStatus(@PathVariable Integer id, @RequestBody Map<String, String> body) {
-        Booking booking = bookingRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
-        String paymentStatus = body.get("paymentStatus");
-        if (!"PAID".equals(paymentStatus) && !"UNPAID".equals(paymentStatus)) {
-            throw new BadRequestException("paymentStatus deve ser PAID ou UNPAID");
-        }
-        booking.setPaymentStatus(paymentStatus);
-        return BookingDto.from(bookingRepository.save(booking));
-    }
 }

@@ -82,13 +82,9 @@ public class TestimonialController {
         return repository.save(testimonial);
     }
 
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public Testimonial create(@RequestBody Testimonial testimonial) {
-        testimonial.setId(null);
-        return repository.save(testimonial);
-    }
-
+    // Não há criação manual (nem para ADMIN nem AGENTE) — um testemunho só nasce de uma
+    // review real e paga através de /from-review acima. Editar/apagar continuam possíveis
+    // para moderação dos testemunhos já existentes.
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Testimonial update(@PathVariable Integer id, @RequestBody Testimonial testimonial) {

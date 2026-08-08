@@ -29,6 +29,10 @@ public class Order {
     public static final String FAILED = "FAILED";
     public static final String CANCELLED = "CANCELLED";
 
+    public static final String PENDING_SHIPMENT = "PENDING_SHIPMENT";
+    public static final String SHIPPED = "SHIPPED";
+    public static final String DELIVERED = "DELIVERED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -45,6 +49,11 @@ public class Order {
 
     @Column(nullable = false)
     private String status = PENDING_PAYMENT;
+
+    // Só faz sentido depois de paga — tratamento de shipping/entrega da encomenda,
+    // separado do estado de pagamento (ver dashboard/loja/encomendas no zebraDM).
+    @Column(name = "fulfillment_status", nullable = false)
+    private String fulfillmentStatus = PENDING_SHIPMENT;
 
     @Column(name = "merchant_ref")
     private String merchantRef;
