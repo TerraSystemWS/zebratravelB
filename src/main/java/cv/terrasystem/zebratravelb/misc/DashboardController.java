@@ -22,7 +22,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DashboardController {
 
-    private static final List<String> PAID_STATUSES = List.of("CONFIRMED", "PAID");
+    // Bookings (excursões/tours) mantêm CONFIRMED e PAID como estados distintos; HotelReservation
+    // fundiu os dois num só ("CONFIRMED") — ver hotel/HotelReservation.java.
+    private static final List<String> BOOKING_PAID_STATUSES = List.of("CONFIRMED", "PAID");
+    private static final List<String> HOTEL_PAID_STATUSES = List.of("CONFIRMED");
 
     private final BookingRepository bookingRepository;
     private final HotelReservationRepository hotelReservationRepository;
@@ -40,8 +43,8 @@ public class DashboardController {
         LocalDateTime start = currentMonth.atDay(1).atStartOfDay();
         LocalDateTime end = LocalDate.now().plusDays(1).atStartOfDay();
 
-        BigDecimal monthlyRevenue = bookingRepository.sumRevenue(PAID_STATUSES, start, end)
-                .add(hotelReservationRepository.sumRevenue(PAID_STATUSES, start, end));
+        BigDecimal monthlyRevenue = bookingRepository.sumRevenue(BOOKING_PAID_STATUSES, start, end)
+                .add(hotelReservationRepository.sumRevenue(HOTEL_PAID_STATUSES, start, end));
 
         long excursionReviewCount = excursionReviewRepository.count();
         long hotelReviewCount = hotelRoomReviewRepository.count();

@@ -18,7 +18,8 @@ public class Testimonial {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(nullable = false)
+    // Nullable porque testemunhos gerados automaticamente a partir de uma review não têm foto
+    // de perfil nem cargo — só testemunhos criados manualmente pelo admin costumam ter isto.
     private String image;
 
     @Column(nullable = false, columnDefinition = "TEXT")
@@ -27,7 +28,6 @@ public class Testimonial {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
     private String designation;
 
     @Column(nullable = false, precision = 2, scale = 1)
@@ -37,4 +37,12 @@ public class Testimonial {
     private String backgroundImage;
 
     private String link;
+
+    // Preenchidos só quando o testemunho nasce de uma review real (ExcursionReview/HotelRoomReview) —
+    // servem para saber a origem e para impedir criar dois testemunhos a partir da mesma review.
+    @Column(name = "source_review_type")
+    private String sourceReviewType;
+
+    @Column(name = "source_review_id")
+    private Integer sourceReviewId;
 }

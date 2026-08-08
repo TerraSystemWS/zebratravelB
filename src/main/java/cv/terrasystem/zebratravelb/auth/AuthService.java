@@ -3,6 +3,7 @@ package cv.terrasystem.zebratravelb.auth;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.security.JwtService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
+import cv.terrasystem.zebratravelb.subscriber.SubscriberService;
 import cv.terrasystem.zebratravelb.user.Role;
 import cv.terrasystem.zebratravelb.user.RoleRepository;
 import cv.terrasystem.zebratravelb.user.User;
@@ -23,6 +24,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final SubscriberService subscriberService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -42,6 +44,7 @@ public class AuthService {
         user.setRole(clientRole);
         user.setStatus("ACTIVE");
         userRepository.save(user);
+        subscriberService.subscribeIfAbsent(user.getEmail());
 
         return buildResponse(user);
     }

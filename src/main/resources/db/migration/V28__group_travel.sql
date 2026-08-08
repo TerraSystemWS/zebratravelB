@@ -1,0 +1,3 @@
+ALTER TABLE excursions ADD COLUMN IF NOT EXISTS group_travel_status VARCHAR(20) NOT NULL DEFAULT 'NONE';
+ALTER TABLE excursions ADD COLUMN IF NOT EXISTS group_travel_confirmed_date DATE;
+ALTER TABLE bookings   ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID';

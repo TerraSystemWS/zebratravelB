@@ -25,8 +25,10 @@ public class HotelReservation {
     public static final String AWAITING_TRANSFER = "AWAITING_TRANSFER";
     public static final String AWAITING_CASH = "AWAITING_CASH";
     public static final String ON_HOLD = "ON_HOLD";
+    // Cobre tanto pagamento online confirmado automaticamente como reservas por transferência/dinheiro
+    // confirmadas manualmente pelo admin/agente — antes havia um estado PAID distinto só para o caso
+    // online, mas era redundante (o check-in já exigia CONFIRMED ou PAID, nunca só um dos dois).
     public static final String CONFIRMED = "CONFIRMED";
-    public static final String PAID = "PAID";
     public static final String CANCELLED = "CANCELLED";
     public static final String FAILED = "FAILED";
 

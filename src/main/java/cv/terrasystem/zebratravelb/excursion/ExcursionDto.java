@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.excursion;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public record ExcursionDto(
@@ -16,7 +17,9 @@ public record ExcursionDto(
         String description,
         List<String> categories,
         Integer createdById,
-        String status
+        String status,
+        String groupTravelStatus,
+        LocalDate groupTravelConfirmedDate
 ) {
     public static ExcursionDto from(Excursion e) {
         return new ExcursionDto(
@@ -24,13 +27,14 @@ public record ExcursionDto(
                 e.getDuration(), e.getLocation(), e.getRating(), e.getReviews(),
                 e.getDescription(), e.getCategories() != null ? List.of(e.getCategories()) : List.of(),
                 e.getCreatedBy() != null ? e.getCreatedBy().getId() : null,
-                e.getStatus()
+                e.getStatus(), e.getGroupTravelStatus(), e.getGroupTravelConfirmedDate()
         );
     }
 
     // rating/reviews are aggregated from real ExcursionReview submissions
     // (see ExcursionReviewController) and must not be settable from here.
-    // status also isn't settable here — only through the dedicated archive/restore endpoints.
+    // status/groupTravelStatus/groupTravelConfirmedDate also aren't settable here —
+    // only through the dedicated archive/restore and group-travel/confirm/reopen endpoints.
     public void applyTo(Excursion e) {
         e.setSlug(slug);
         e.setTitle(title);

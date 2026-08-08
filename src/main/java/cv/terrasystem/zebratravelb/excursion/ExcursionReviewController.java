@@ -28,6 +28,11 @@ public class ExcursionReviewController {
         return reviewRepository.findByExcursion_SlugOrderByCreatedAtDesc(slug).stream().map(ExcursionReviewDto::from).toList();
     }
 
+    @GetMapping("/eligible")
+    public boolean isEligible(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
+        return bookingRepository.existsByExcursion_SlugAndUser_IdAndStatusIn(slug, principal.getId(), ELIGIBLE_STATUSES);
+    }
+
     @PostMapping
     public ExcursionReviewDto create(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug, @RequestBody CreateExcursionReviewRequest request) {
         Excursion excursion = excursionRepository.findBySlug(slug)

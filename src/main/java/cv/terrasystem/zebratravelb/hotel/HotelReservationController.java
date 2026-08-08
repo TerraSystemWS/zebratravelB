@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.hotel;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
+import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.user.Role;
@@ -27,14 +28,12 @@ public class HotelReservationController {
             HotelReservation.ONLINE, HotelReservation.TRANSFER, HotelReservation.CASH
     );
     private static final Set<String> ADMIN_SETTABLE_STATUSES = Set.of(
-            HotelReservation.ON_HOLD, HotelReservation.CONFIRMED, HotelReservation.PAID, HotelReservation.CANCELLED
+            HotelReservation.ON_HOLD, HotelReservation.CONFIRMED, HotelReservation.CANCELLED
     );
     private static final Set<String> CHECK_IN_ELIGIBLE_STATUSES = Set.of(
-            HotelReservation.CONFIRMED, HotelReservation.PAID
+            HotelReservation.CONFIRMED
     );
     // Reservas ainda "não pagas" — o único conjunto que um AGENTE (não-admin) pode apagar.
-    // CONFIRMED conta como "paga" para este efeito (normalmente implica processo de pagamento já tratado
-    // manualmente pelo admin/agente) — só ADMIN apaga CONFIRMED/PAID.
     private static final Set<String> NOT_YET_PAID_STATUSES = Set.of(
             HotelReservation.PENDING_PAYMENT, HotelReservation.AWAITING_TRANSFER, HotelReservation.AWAITING_CASH,
             HotelReservation.CANCELLED, HotelReservation.FAILED
@@ -201,9 +200,12 @@ public class HotelReservationController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
         HotelReservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
+        if (HotelReservation.CONFIRMED.equals(reservation.getStatus())) {
+            throw new ConflictException("Não é possível apagar uma reserva confirmada — cancele-a em vez disso.");
+        }
         boolean isAdmin = principal.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
         if (!isAdmin && !NOT_YET_PAID_STATUSES.contains(reservation.getStatus())) {
-            throw new BadRequestException("Só um admin pode apagar uma reserva confirmada, paga ou em espera");
+            throw new BadRequestException("Só um admin pode apagar uma reserva em espera");
         }
         reservationRepository.delete(reservation);
         return ResponseEntity.noContent().build();

@@ -14,7 +14,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class HotelRoomReviewController {
 
-    private static final List<String> ELIGIBLE_STATUSES = List.of(HotelReservation.CONFIRMED, HotelReservation.PAID);
+    private static final List<String> ELIGIBLE_STATUSES = List.of(HotelReservation.CONFIRMED);
 
     private final HotelRoomReviewRepository reviewRepository;
     private final HotelRoomRepository roomRepository;
@@ -23,6 +23,11 @@ public class HotelRoomReviewController {
     @GetMapping
     public List<ReviewDto> getReviews(@PathVariable Integer roomId) {
         return reviewRepository.findByRoom_IdOrderByCreatedAtDesc(roomId).stream().map(ReviewDto::from).toList();
+    }
+
+    @GetMapping("/eligible")
+    public boolean isEligible(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer roomId) {
+        return reservationRepository.existsByRoom_IdAndUser_IdAndStatusIn(roomId, principal.getId(), ELIGIBLE_STATUSES);
     }
 
     @PostMapping

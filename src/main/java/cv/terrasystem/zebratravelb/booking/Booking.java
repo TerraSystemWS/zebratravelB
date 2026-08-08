@@ -44,6 +44,12 @@ public class Booking {
     @Column(nullable = false)
     private String status = "PENDING";
 
+    // Separado de `status` (workflow: pendente/confirmada/cancelada) — responde só
+    // à pergunta "esta reserva já foi paga?", já que Excursion/Tour não têm pagamento
+    // online integrado hoje (ao contrário de Hotel/Loja), é o admin/agente que marca.
+    @Column(name = "payment_status", nullable = false)
+    private String paymentStatus = "UNPAID";
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 

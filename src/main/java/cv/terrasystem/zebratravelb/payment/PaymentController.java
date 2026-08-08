@@ -137,7 +137,7 @@ public class PaymentController {
             if (reservation != null) {
                 if (success) {
                     boolean valid = verifyResponseFingerprint(body, reservation.getTotalAmount());
-                    reservation.setStatus(valid ? HotelReservation.PAID : HotelReservation.FAILED);
+                    reservation.setStatus(valid ? HotelReservation.CONFIRMED : HotelReservation.FAILED);
                 } else {
                     reservation.setStatus("true".equals(body.get("UserCancelled")) ? HotelReservation.CANCELLED : HotelReservation.FAILED);
                 }

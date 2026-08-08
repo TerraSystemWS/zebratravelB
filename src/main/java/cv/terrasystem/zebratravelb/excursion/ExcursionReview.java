@@ -36,6 +36,9 @@ public class ExcursionReview {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "is_testimonial", nullable = false)
+    private boolean testimonial = false;
+
     @PrePersist
     void onCreate() {
         createdAt = LocalDateTime.now();

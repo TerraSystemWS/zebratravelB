@@ -9,6 +9,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -57,6 +58,14 @@ public class Excursion {
 
     @Column(nullable = false)
     private String status = "ACTIVE";
+
+    // NONE = sem reservas ainda; OPEN = já tem reservas, à espera do admin/agente confirmar
+    // uma data final; CONFIRMED = data confirmada, é isto que alimenta a secção "Grupo Travel" da home.
+    @Column(name = "group_travel_status", nullable = false)
+    private String groupTravelStatus = "NONE";
+
+    @Column(name = "group_travel_confirmed_date")
+    private LocalDate groupTravelConfirmedDate;
 
     @PrePersist
     void onCreate() {

@@ -62,6 +62,10 @@ public class BookingController {
             booking.setExcursion(excursion);
             booking.setItemName(excursion.getTitle());
             booking.setAmount(excursion.getPrice().multiply(BigDecimal.valueOf(guests)));
+            if ("NONE".equals(excursion.getGroupTravelStatus())) {
+                excursion.setGroupTravelStatus("OPEN");
+                excursionRepository.save(excursion);
+            }
         } else {
             Tour tour = tourRepository.findById(request.tourId())
                     .orElseThrow(() -> new NotFoundException("Destino não encontrado: " + request.tourId()));
@@ -79,6 +83,19 @@ public class BookingController {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
         booking.setStatus(body.get("status").toUpperCase());
+        return BookingDto.from(bookingRepository.save(booking));
+    }
+
+    @PatchMapping("/{id}/payment-status")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public BookingDto updatePaymentStatus(@PathVariable Integer id, @RequestBody Map<String, String> body) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
+        String paymentStatus = body.get("paymentStatus");
+        if (!"PAID".equals(paymentStatus) && !"UNPAID".equals(paymentStatus)) {
+            throw new BadRequestException("paymentStatus deve ser PAID ou UNPAID");
+        }
+        booking.setPaymentStatus(paymentStatus);
         return BookingDto.from(bookingRepository.save(booking));
     }
 }

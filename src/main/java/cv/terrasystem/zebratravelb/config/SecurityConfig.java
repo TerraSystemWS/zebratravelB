@@ -58,6 +58,12 @@ public class SecurityConfig {
             "/api/hotel-amenities"
     };
 
+    // Endpoints POST públicos (sem autenticação) — formulários do site que não exigem login.
+    private static final String[] PUBLIC_POST_PATHS = {
+            "/api/subscribers",
+            "/api/job-applications"
+    };
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -70,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/payments/vinti4/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll()
+                        .requestMatchers(HttpMethod.POST, PUBLIC_POST_PATHS).permitAll()
                         .anyRequest().authenticated()
                 )
                 // Sem isto, o Spring Security usa o Http403ForbiddenEntryPoint por omissão para pedidos sem

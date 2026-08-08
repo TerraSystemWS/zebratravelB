@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface TestimonialRepository extends JpaRepository<Testimonial, Integer> {
     List<Testimonial> findByImageContainingOrBackgroundImageContaining(String image, String backgroundImage);
+    boolean existsBySourceReviewTypeAndSourceReviewId(String sourceReviewType, Integer sourceReviewId);
 }
