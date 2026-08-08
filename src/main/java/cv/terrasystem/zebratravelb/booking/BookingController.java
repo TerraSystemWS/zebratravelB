@@ -3,6 +3,8 @@ package cv.terrasystem.zebratravelb.booking;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.excursion.Excursion;
+import cv.terrasystem.zebratravelb.excursion.ExcursionGroup;
+import cv.terrasystem.zebratravelb.excursion.ExcursionGroupRepository;
 import cv.terrasystem.zebratravelb.excursion.ExcursionRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.tour.Tour;
@@ -24,6 +26,7 @@ public class BookingController {
 
     private final BookingRepository bookingRepository;
     private final ExcursionRepository excursionRepository;
+    private final ExcursionGroupRepository excursionGroupRepository;
     private final TourRepository tourRepository;
 
     @GetMapping
@@ -62,10 +65,18 @@ public class BookingController {
             booking.setExcursion(excursion);
             booking.setItemName(excursion.getTitle());
             booking.setAmount(excursion.getPrice().multiply(BigDecimal.valueOf(guests)));
-            if ("NONE".equals(excursion.getGroupTravelStatus())) {
-                excursion.setGroupTravelStatus("OPEN");
-                excursionRepository.save(excursion);
-            }
+            // Uma excursão confirmada não pode receber mais reservas no mesmo grupo —
+            // se já não há nenhum grupo OPEN (porque o único existente está CONFIRMED
+            // ou COMPLETED, ou porque é a primeira reserva de sempre), abre-se um novo.
+            ExcursionGroup group = excursionGroupRepository
+                    .findFirstByExcursion_IdAndStatus(excursion.getId(), "OPEN")
+                    .orElseGet(() -> {
+                        ExcursionGroup g = new ExcursionGroup();
+                        g.setExcursion(excursion);
+                        g.setStatus("OPEN");
+                        return excursionGroupRepository.save(g);
+                    });
+            booking.setExcursionGroup(group);
         } else {
             Tour tour = tourRepository.findById(request.tourId())
                     .orElseThrow(() -> new NotFoundException("Destino não encontrado: " + request.tourId()));

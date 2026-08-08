@@ -1,6 +1,7 @@
 package cv.terrasystem.zebratravelb.booking;
 
 import cv.terrasystem.zebratravelb.excursion.Excursion;
+import cv.terrasystem.zebratravelb.excursion.ExcursionGroup;
 import cv.terrasystem.zebratravelb.tour.Tour;
 import cv.terrasystem.zebratravelb.user.User;
 import jakarta.persistence.*;
@@ -30,6 +31,10 @@ public class Booking {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "excursion_id")
     private Excursion excursion;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "excursion_group_id")
+    private ExcursionGroup excursionGroup;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "tour_id")

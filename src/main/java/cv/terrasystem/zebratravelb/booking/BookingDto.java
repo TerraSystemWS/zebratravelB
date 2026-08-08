@@ -12,6 +12,7 @@ public record BookingDto(
         String status,
         BigDecimal amount,
         String excursionSlug,
+        Integer excursionGroupId,
         Integer tourId,
         String type
 ) {
@@ -25,6 +26,7 @@ public record BookingDto(
                 b.getStatus(),
                 b.getAmount(),
                 b.getExcursion() != null ? b.getExcursion().getSlug() : null,
+                b.getExcursionGroup() != null ? b.getExcursionGroup().getId() : null,
                 b.getTour() != null ? b.getTour().getId() : null,
                 b.getExcursion() != null ? "EXCURSION" : "TOUR"
         );

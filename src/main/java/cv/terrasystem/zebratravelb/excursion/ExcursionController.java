@@ -1,7 +1,6 @@
 package cv.terrasystem.zebratravelb.excursion;
 
 import cv.terrasystem.zebratravelb.booking.BookingRepository;
-import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.common.OwnershipGuard;
@@ -12,7 +11,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -23,6 +21,7 @@ public class ExcursionController {
     private final ExcursionRepository excursionRepository;
     private final BookingRepository bookingRepository;
     private final ExcursionReviewRepository excursionReviewRepository;
+    private final ExcursionGroupRepository excursionGroupRepository;
 
     @GetMapping
     public List<ExcursionDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
@@ -32,11 +31,15 @@ public class ExcursionController {
                 .toList();
     }
 
+    // Grupos de viagem confirmados (data final marcada) — alimenta a secção
+    // "Grupo Travel" da home. Uma excursão pode ter mais do que um grupo ao
+    // longo do tempo (ver ExcursionGroupController), por isso isto já não
+    // vem da própria Excursion.
     @GetMapping("/group-travel")
-    public List<ExcursionDto> getGroupTravel() {
-        return excursionRepository.findAll().stream()
-                .filter(e -> "CONFIRMED".equals(e.getGroupTravelStatus()) && !"ARCHIVED".equals(e.getStatus()))
-                .map(ExcursionDto::from)
+    public List<ExcursionGroupDto> getGroupTravel() {
+        return excursionGroupRepository.findByStatus("CONFIRMED").stream()
+                .filter(g -> !"ARCHIVED".equals(g.getExcursion().getStatus()))
+                .map(ExcursionGroupDto::from)
                 .toList();
     }
 
@@ -90,47 +93,6 @@ public class ExcursionController {
         Excursion excursion = find(slug);
         OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
         excursion.setStatus("ACTIVE");
-        return ExcursionDto.from(excursionRepository.save(excursion));
-    }
-
-    @PostMapping("/{slug}/group-travel/confirm")
-    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
-    public ExcursionDto confirmGroupTravel(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug, @RequestBody ConfirmGroupTravelRequest request) {
-        Excursion excursion = find(slug);
-        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
-        if (request.confirmedDate() == null) {
-            throw new BadRequestException("confirmedDate é obrigatória");
-        }
-        if (request.confirmedDate().isBefore(LocalDate.now())) {
-            throw new BadRequestException("A data confirmada não pode ser no passado");
-        }
-        excursion.setGroupTravelStatus("CONFIRMED");
-        excursion.setGroupTravelConfirmedDate(request.confirmedDate());
-        return ExcursionDto.from(excursionRepository.save(excursion));
-    }
-
-    @PostMapping("/{slug}/group-travel/reopen")
-    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
-    public ExcursionDto reopenGroupTravel(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
-        Excursion excursion = find(slug);
-        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
-        excursion.setGroupTravelStatus(bookingRepository.existsByExcursion_Id(excursion.getId()) ? "OPEN" : "NONE");
-        excursion.setGroupTravelConfirmedDate(null);
-        return ExcursionDto.from(excursionRepository.save(excursion));
-    }
-
-    @PostMapping("/{slug}/group-travel/complete")
-    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
-    public ExcursionDto completeGroupTravel(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
-        Excursion excursion = find(slug);
-        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
-        if (!"CONFIRMED".equals(excursion.getGroupTravelStatus())) {
-            throw new BadRequestException("Só é possível marcar como terminada uma excursão confirmada.");
-        }
-        if (excursion.getGroupTravelConfirmedDate() == null || excursion.getGroupTravelConfirmedDate().isAfter(LocalDate.now())) {
-            throw new BadRequestException("A excursão só pode ser marcada como terminada depois da data confirmada.");
-        }
-        excursion.setGroupTravelStatus("COMPLETED");
         return ExcursionDto.from(excursionRepository.save(excursion));
     }
 
