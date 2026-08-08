@@ -119,6 +119,21 @@ public class ExcursionController {
         return ExcursionDto.from(excursionRepository.save(excursion));
     }
 
+    @PostMapping("/{slug}/group-travel/complete")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public ExcursionDto completeGroupTravel(@AuthenticationPrincipal UserPrincipal principal, @PathVariable String slug) {
+        Excursion excursion = find(slug);
+        OwnershipGuard.requireOwnerOrAdmin(principal, excursion.getCreatedBy());
+        if (!"CONFIRMED".equals(excursion.getGroupTravelStatus())) {
+            throw new BadRequestException("Só é possível marcar como terminada uma excursão confirmada.");
+        }
+        if (excursion.getGroupTravelConfirmedDate() == null || excursion.getGroupTravelConfirmedDate().isAfter(LocalDate.now())) {
+            throw new BadRequestException("A excursão só pode ser marcada como terminada depois da data confirmada.");
+        }
+        excursion.setGroupTravelStatus("COMPLETED");
+        return ExcursionDto.from(excursionRepository.save(excursion));
+    }
+
     private Excursion find(String slug) {
         return excursionRepository.findBySlug(slug)
                 .orElseThrow(() -> new NotFoundException("Excursão não encontrada: " + slug));
