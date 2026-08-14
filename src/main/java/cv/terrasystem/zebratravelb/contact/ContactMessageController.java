@@ -2,6 +2,8 @@ package cv.terrasystem.zebratravelb.contact;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,7 @@ import java.util.Map;
 public class ContactMessageController {
 
     private final ContactMessageRepository repository;
+    private final NotificationService notificationService;
 
     // ResponseEntity.noContent() (204) em vez de "void" — um método void devolve 200 com corpo
     // vazio, e o cliente (zebratravel/lib/api.ts) tenta sempre fazer res.json() a não ser que o
@@ -42,7 +45,10 @@ public class ContactMessageController {
         message.setPhone(request.phone());
         message.setSubject(request.subject());
         message.setMessage(request.message());
-        repository.save(message);
+        ContactMessage saved = repository.save(message);
+        notificationService.notify(Notification.CONTACT_MESSAGE, "Nova mensagem de contacto",
+                saved.getName() + (saved.getSubject() != null && !saved.getSubject().isBlank() ? " — " + saved.getSubject() : ""),
+                "/dashboard/contacts", saved.getId());
         return ResponseEntity.noContent().build();
     }
 

@@ -2,6 +2,8 @@ package cv.terrasystem.zebratravelb.hotel;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +21,7 @@ public class HotelRoomReviewController {
     private final HotelRoomReviewRepository reviewRepository;
     private final HotelRoomRepository roomRepository;
     private final HotelReservationRepository reservationRepository;
+    private final NotificationService notificationService;
 
     @GetMapping
     public List<ReviewDto> getReviews(@PathVariable Integer roomId) {
@@ -50,6 +53,9 @@ public class HotelRoomReviewController {
         review.setUser(principal.getUser());
         review.setRating(request.rating());
         review.setComment(request.comment());
-        return ReviewDto.from(reviewRepository.save(review));
+        HotelRoomReview saved = reviewRepository.save(review);
+        notificationService.notify(Notification.REVIEW, "Novo comentário",
+                room.getRoomType().getName() + " — " + request.rating() + "★", "/dashboard/testimonials", saved.getId());
+        return ReviewDto.from(saved);
     }
 }

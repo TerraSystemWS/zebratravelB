@@ -3,6 +3,8 @@ package cv.terrasystem.zebratravelb.hotel;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.user.Role;
 import cv.terrasystem.zebratravelb.user.User;
@@ -45,6 +47,7 @@ public class HotelReservationController {
     private final HotelReservationRepository reservationRepository;
     private final HotelRoomRepository roomRepository;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
 
     @GetMapping("/mine")
     public List<ReservationDto> getMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -98,6 +101,9 @@ public class HotelReservationController {
         if (voucher != null) {
             voucherService.recordRedemption(voucher, principal.getUser(), baseAmount.subtract(finalAmount), null, saved, null);
         }
+        notificationService.notify(Notification.HOTEL_RESERVATION, "Nova reserva de quarto",
+                saved.getHotel().getName() + " — " + room.getRoomType().getName(),
+                "/dashboard/hotel/reservas", saved.getId());
         return ReservationDto.from(saved);
     }
 
@@ -142,6 +148,9 @@ public class HotelReservationController {
         if (voucher != null) {
             voucherService.recordRedemption(voucher, principal.getUser(), baseAmount.subtract(finalAmount), null, saved, null);
         }
+        notificationService.notify(Notification.HOTEL_RESERVATION, "Nova reserva de quarto",
+                saved.getHotel().getName() + " — " + room.getRoomType().getName(),
+                "/dashboard/hotel/reservas", saved.getId());
         return ReservationDto.from(saved);
     }
 

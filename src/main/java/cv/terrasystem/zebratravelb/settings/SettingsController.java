@@ -12,6 +12,9 @@ import java.util.Map;
 public class SettingsController {
 
     private static final String MAINTENANCE_KEY = "maintenance_mode";
+    // Som dos toasts de notificação no ZebraDash — partilhado por todos, como o resto do
+    // sistema de notificações (não é uma preferência por browser/utilizador).
+    private static final String NOTIFICATION_SOUND_KEY = "notification_sound_enabled";
 
     private final AppSettingRepository appSettingRepository;
 
@@ -34,5 +37,27 @@ public class SettingsController {
         setting.setSettingValue(String.valueOf(body.get("mode")));
         appSettingRepository.save(setting);
         return Map.of("mode", body.get("mode"));
+    }
+
+    @GetMapping("/notification-sound")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public Map<String, Integer> getNotificationSound() {
+        int enabled = appSettingRepository.findById(NOTIFICATION_SOUND_KEY)
+                .map(s -> Integer.parseInt(s.getSettingValue()))
+                .orElse(1);
+        return Map.of("enabled", enabled);
+    }
+
+    @PutMapping("/notification-sound")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Integer> setNotificationSound(@RequestBody Map<String, Integer> body) {
+        AppSetting setting = appSettingRepository.findById(NOTIFICATION_SOUND_KEY).orElseGet(() -> {
+            AppSetting s = new AppSetting();
+            s.setSettingKey(NOTIFICATION_SOUND_KEY);
+            return s;
+        });
+        setting.setSettingValue(String.valueOf(body.get("enabled")));
+        appSettingRepository.save(setting);
+        return Map.of("enabled", body.get("enabled"));
     }
 }

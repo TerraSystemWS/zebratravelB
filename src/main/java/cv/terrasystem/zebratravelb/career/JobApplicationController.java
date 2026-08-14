@@ -2,6 +2,8 @@ package cv.terrasystem.zebratravelb.career;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -29,6 +31,7 @@ public class JobApplicationController {
     private static final long MAX_CV_SIZE_BYTES = 2L * 1024 * 1024;
 
     private final JobApplicationRepository repository;
+    private final NotificationService notificationService;
 
     @Value("${app.media.upload-dir}")
     private String uploadDir;
@@ -78,7 +81,9 @@ public class JobApplicationController {
         application.setDescription(description);
         application.setCvStoredFilename(stored);
         application.setCvOriginalFilename(original);
-        repository.save(application);
+        JobApplication saved = repository.save(application);
+        notificationService.notify(Notification.JOB_APPLICATION, "Nova candidatura de Carreiras",
+                name + " — " + area, "/dashboard/carreiras", saved.getId());
     }
 
     @GetMapping

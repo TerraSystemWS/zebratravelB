@@ -27,12 +27,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                      @NonNull HttpServletResponse response,
                                      @NonNull FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
+        String token;
+        if (header != null && header.startsWith("Bearer ")) {
+            token = header.substring(7);
+        } else if ("/api/notifications/stream".equals(request.getRequestURI())) {
+            // A API EventSource do browser não permite definir headers, por isso o token
+            // vem por query param só nesta rota — nenhuma outra aceita isto (ver dev-notes.md).
+            token = request.getParameter("token");
+        } else {
+            token = null;
+        }
+        if (token == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token = header.substring(7);
         try {
             String email = jwtService.extractEmail(token);
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {

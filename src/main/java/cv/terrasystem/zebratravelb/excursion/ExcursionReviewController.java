@@ -3,6 +3,8 @@ package cv.terrasystem.zebratravelb.excursion;
 import cv.terrasystem.zebratravelb.booking.BookingRepository;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +24,7 @@ public class ExcursionReviewController {
     private final ExcursionReviewRepository reviewRepository;
     private final ExcursionRepository excursionRepository;
     private final BookingRepository bookingRepository;
+    private final NotificationService notificationService;
 
     @GetMapping
     public List<ExcursionReviewDto> getReviews(@PathVariable String slug) {
@@ -54,6 +57,8 @@ public class ExcursionReviewController {
         review.setRating(request.rating());
         review.setComment(request.comment());
         ExcursionReview saved = reviewRepository.save(review);
+        notificationService.notify(Notification.REVIEW, "Novo comentário",
+                excursion.getTitle() + " — " + request.rating() + "★", "/dashboard/testimonials", saved.getId());
 
         updateAggregateRating(excursion, slug);
 

@@ -6,6 +6,8 @@ import cv.terrasystem.zebratravelb.excursion.Excursion;
 import cv.terrasystem.zebratravelb.excursion.ExcursionGroup;
 import cv.terrasystem.zebratravelb.excursion.ExcursionGroupRepository;
 import cv.terrasystem.zebratravelb.excursion.ExcursionRepository;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.tour.Tour;
 import cv.terrasystem.zebratravelb.tour.TourRepository;
@@ -39,6 +41,7 @@ public class BookingController {
     private final ExcursionGroupRepository excursionGroupRepository;
     private final TourRepository tourRepository;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
 
     @GetMapping
     public List<BookingDto> getAll(@AuthenticationPrincipal UserPrincipal principal) {
@@ -127,6 +130,10 @@ public class BookingController {
         Booking saved = bookingRepository.save(booking);
         if (voucher != null) {
             voucherService.recordRedemption(voucher, principal.getUser(), discountAmount, saved, null, null);
+        }
+        if (hasExcursion) {
+            notificationService.notify(Notification.EXCURSION_BOOKING, "Nova reserva de excursão",
+                    saved.getItemName(), "/dashboard/bookings", saved.getId());
         }
         return BookingDto.from(saved);
     }
