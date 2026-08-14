@@ -1,5 +1,6 @@
 package cv.terrasystem.zebratravelb.media;
 
+import cv.terrasystem.zebratravelb.campaign.CampaignRepository;
 import cv.terrasystem.zebratravelb.content.SiteContentRepository;
 import cv.terrasystem.zebratravelb.excursion.ExcursionRepository;
 import cv.terrasystem.zebratravelb.hotel.HotelRepository;
@@ -44,6 +45,7 @@ public class MediaUsageChecker {
     private final TestimonialRepository testimonialRepository;
     private final TravelPackageRepository travelPackageRepository;
     private final SiteContentRepository siteContentRepository;
+    private final CampaignRepository campaignRepository;
 
     public List<String> findUsages(String storedFilename) {
         List<String> usages = new ArrayList<>();
@@ -78,6 +80,8 @@ public class MediaUsageChecker {
                 .forEach(tp -> usages.add("Pacote de Viagem: " + tp.getTitle()));
         siteContentRepository.findByContentValueContaining(storedFilename)
                 .forEach(sc -> usages.add("Conteúdo do site: " + sc.getContentKey()));
+        campaignRepository.findByImageUrlContaining(storedFilename)
+                .forEach(c -> usages.add("Campanha: " + c.getName()));
 
         return usages;
     }
