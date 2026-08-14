@@ -27,6 +27,11 @@ public class AuthController {
     @GetMapping("/me")
     public AuthResponse me(@AuthenticationPrincipal UserPrincipal principal) {
         User user = principal.getUser();
-        return new AuthResponse(null, user.getId(), user.getFullName(), user.getEmail(), user.getRole().getName());
+        return new AuthResponse(null, user.getId(), user.getFullName(), user.getEmail(), user.getRole().getName(), user.getPhone());
+    }
+
+    @PatchMapping("/me")
+    public AuthResponse updateMe(@AuthenticationPrincipal UserPrincipal principal, @RequestBody UpdateMeRequest request) {
+        return authService.updateMe(principal.getUser(), request);
     }
 }
