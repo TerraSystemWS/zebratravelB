@@ -13,6 +13,7 @@ import cv.terrasystem.zebratravelb.misc.TestimonialRepository;
 import cv.terrasystem.zebratravelb.misc.TravelPackageRepository;
 import cv.terrasystem.zebratravelb.post.AuthorRepository;
 import cv.terrasystem.zebratravelb.post.PostRepository;
+import cv.terrasystem.zebratravelb.product.CartItemRepository;
 import cv.terrasystem.zebratravelb.product.ProductRepository;
 import cv.terrasystem.zebratravelb.tour.TourRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class MediaUsageChecker {
     private final TravelPackageRepository travelPackageRepository;
     private final SiteContentRepository siteContentRepository;
     private final CampaignRepository campaignRepository;
+    private final CartItemRepository cartItemRepository;
 
     public List<String> findUsages(String storedFilename) {
         List<String> usages = new ArrayList<>();
@@ -82,6 +84,11 @@ public class MediaUsageChecker {
                 .forEach(sc -> usages.add("Conteúdo do site: " + sc.getContentKey()));
         campaignRepository.findByImageUrlContaining(storedFilename)
                 .forEach(c -> usages.add("Campanha: " + c.getName()));
+        // CartItem.imageUrl é uma cópia denormalizada de Product.imageUrl feita ao adicionar
+        // ao carrinho (CartController.add) — ainda ativa e visível ao cliente enquanto lá
+        // estiver, ao contrário de OrderItem (sem campo de imagem nenhum, não precisa disto).
+        cartItemRepository.findByImageUrlContaining(storedFilename)
+                .forEach(ci -> usages.add("Carrinho de um cliente: " + ci.getName()));
 
         return usages;
     }
