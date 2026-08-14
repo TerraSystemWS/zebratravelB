@@ -8,6 +8,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,15 @@ public class GlobalExceptionHandler {
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .orElse("Dados inválidos");
         return build(HttpStatus.BAD_REQUEST, message, req);
+    }
+
+    // Spring lança isto para qualquer caminho estático (ex: /uploads/**) sem ficheiro
+    // correspondente — sem este handler específico, caía no catch-all genérico abaixo e
+    // devolvia 500 em vez do 404 correto (achado em tarefas.md, sem ligação a nenhuma
+    // funcionalidade específica: acontece para qualquer /uploads/ inexistente).
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest req) {
+        return build(HttpStatus.NOT_FOUND, "Recurso não encontrado", req);
     }
 
     @ExceptionHandler(Exception.class)
