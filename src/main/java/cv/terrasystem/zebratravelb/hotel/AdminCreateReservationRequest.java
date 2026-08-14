@@ -12,6 +12,7 @@ public record AdminCreateReservationRequest(
         Integer guests,
         String paymentMethod,
         String status,   // optional initial status, e.g. ON_HOLD or CONFIRMED - only this admin endpoint may set it
-        String voucherCode   // opcional
+        String voucherCode,  // opcional
+        String customerNif   // opcional — sem ele, a fatura sai como "Consumidor Final"
 ) {
 }

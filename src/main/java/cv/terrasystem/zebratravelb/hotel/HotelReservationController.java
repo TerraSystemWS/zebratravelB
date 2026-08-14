@@ -3,6 +3,7 @@ package cv.terrasystem.zebratravelb.hotel;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.invoice.InvoiceService;
 import cv.terrasystem.zebratravelb.notification.Notification;
 import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -48,6 +49,7 @@ public class HotelReservationController {
     private final HotelRoomRepository roomRepository;
     private final VoucherService voucherService;
     private final NotificationService notificationService;
+    private final InvoiceService invoiceService;
 
     @GetMapping("/mine")
     public List<ReservationDto> getMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -86,6 +88,7 @@ public class HotelReservationController {
         reservation.setCheckOut(request.checkOut());
         reservation.setGuests(resolveGuests(room, request.guests()));
         reservation.setPaymentMethod(request.paymentMethod().toUpperCase());
+        reservation.setCustomerNif(request.customerNif());
         reservation.setStatus(switch (reservation.getPaymentMethod()) {
             case HotelReservation.TRANSFER -> HotelReservation.AWAITING_TRANSFER;
             case HotelReservation.CASH -> HotelReservation.AWAITING_CASH;
@@ -129,6 +132,7 @@ public class HotelReservationController {
         reservation.setCheckOut(request.checkOut());
         reservation.setGuests(resolveGuests(room, request.guests()));
         reservation.setPaymentMethod(request.paymentMethod().toUpperCase());
+        reservation.setCustomerNif(request.customerNif());
         reservation.setCreatedBy(principal.getUser());
 
         String status = request.status();
@@ -166,6 +170,11 @@ public class HotelReservationController {
         HotelReservation saved = reservationRepository.save(reservation);
         if (HotelReservation.CANCELLED.equals(saved.getStatus())) {
             voucherService.releaseForHotelReservation(saved.getId());
+        } else if (HotelReservation.CONFIRMED.equals(saved.getStatus())) {
+            // Cobre a confirmação manual de pagamento por transferência/dinheiro — o pagamento
+            // online já emite a fatura a partir de PaymentController.callback();
+            // issueForHotelReservation() é idempotente, sem risco de duplicar.
+            invoiceService.issueForHotelReservation(saved);
         }
         return ReservationDto.from(saved);
     }

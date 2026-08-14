@@ -65,6 +65,10 @@ public class Booking {
     @Column(name = "guest_phone")
     private String guestPhone;
 
+    // Opcional — sem ele, a fatura sai como "Consumidor Final" (ver invoice/InvoiceService).
+    @Column(name = "customer_nif")
+    private String customerNif;
+
     @Column(name = "booking_date", nullable = false)
     private LocalDate bookingDate;
 

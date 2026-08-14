@@ -8,6 +8,7 @@ public record CreateReservationRequest(
         LocalDate checkOut,
         Integer guests,
         String paymentMethod,
-        String voucherCode   // opcional
+        String voucherCode,  // opcional
+        String customerNif   // opcional — sem ele, a fatura sai como "Consumidor Final"
 ) {
 }

@@ -8,6 +8,7 @@ public record CreateBookingRequest(
         LocalDate date,
         Integer guests,
         String paymentMethod,  // obrigatório só para excursões (ONLINE/TRANSFER/CASH) — Destinos (Tour) continuam sem gateway de pagamento
-        String voucherCode     // opcional, só para excursões (Destinos não têm promoções/vouchers)
+        String voucherCode,    // opcional, só para excursões (Destinos não têm promoções/vouchers)
+        String customerNif     // opcional — sem ele, a fatura sai como "Consumidor Final"
 ) {
 }

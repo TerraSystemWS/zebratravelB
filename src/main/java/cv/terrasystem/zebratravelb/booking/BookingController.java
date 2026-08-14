@@ -6,6 +6,7 @@ import cv.terrasystem.zebratravelb.excursion.Excursion;
 import cv.terrasystem.zebratravelb.excursion.ExcursionGroup;
 import cv.terrasystem.zebratravelb.excursion.ExcursionGroupRepository;
 import cv.terrasystem.zebratravelb.excursion.ExcursionRepository;
+import cv.terrasystem.zebratravelb.invoice.InvoiceService;
 import cv.terrasystem.zebratravelb.notification.Notification;
 import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -42,6 +43,7 @@ public class BookingController {
     private final TourRepository tourRepository;
     private final VoucherService voucherService;
     private final NotificationService notificationService;
+    private final InvoiceService invoiceService;
 
     @GetMapping
     public List<BookingDto> getAll(@AuthenticationPrincipal UserPrincipal principal) {
@@ -71,6 +73,7 @@ public class BookingController {
         Booking booking = new Booking();
         booking.setUser(principal.getUser());
         booking.setBookingDate(request.date());
+        booking.setCustomerNif(request.customerNif());
 
         Voucher voucher = null;
         BigDecimal discountAmount = BigDecimal.ZERO;
@@ -148,8 +151,12 @@ public class BookingController {
         Booking saved = bookingRepository.save(booking);
         if (Booking.CANCELLED.equals(status)) {
             voucherService.releaseForBooking(saved.getId());
+        } else if (Booking.CONFIRMED.equals(status)) {
+            // Cobre a confirmação manual de pagamento por transferência/dinheiro — o pagamento
+            // online já emite a fatura a partir de PaymentController.callback(); issueForBooking()
+            // é idempotente, por isso não há risco de duplicar se o mesmo booking já a tiver.
+            invoiceService.issueForBooking(saved);
         }
         return BookingDto.from(saved);
     }
-
 }

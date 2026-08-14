@@ -6,6 +6,7 @@ import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.hotel.HotelReservation;
 import cv.terrasystem.zebratravelb.hotel.HotelReservationRepository;
+import cv.terrasystem.zebratravelb.invoice.InvoiceService;
 import cv.terrasystem.zebratravelb.order.Order;
 import cv.terrasystem.zebratravelb.order.OrderItem;
 import cv.terrasystem.zebratravelb.order.OrderRepository;
@@ -41,6 +42,7 @@ public class PaymentController {
     private final ProductRepository productRepository;
     private final Vinti4FingerprintService fingerprintService;
     private final VoucherService voucherService;
+    private final InvoiceService invoiceService;
 
     @Value("${app.vinti4.pos-id}")
     private String posId;
@@ -168,6 +170,8 @@ public class PaymentController {
                 hotelReservationRepository.save(reservation);
                 if (HotelReservation.CANCELLED.equals(reservation.getStatus()) || HotelReservation.FAILED.equals(reservation.getStatus())) {
                     voucherService.releaseForHotelReservation(reservation.getId());
+                } else if (HotelReservation.CONFIRMED.equals(reservation.getStatus())) {
+                    invoiceService.issueForHotelReservation(reservation);
                 }
                 entityId = reservation.getId();
                 finalStatus = reservation.getStatus();
@@ -185,6 +189,8 @@ public class PaymentController {
                 bookingRepository.save(booking);
                 if (Booking.CANCELLED.equals(booking.getStatus()) || Booking.FAILED.equals(booking.getStatus())) {
                     voucherService.releaseForBooking(booking.getId());
+                } else if (Booking.CONFIRMED.equals(booking.getStatus())) {
+                    invoiceService.issueForBooking(booking);
                 }
                 entityId = booking.getId();
                 finalStatus = booking.getStatus();
@@ -206,6 +212,9 @@ public class PaymentController {
                     voucherService.releaseForOrder(order.getId());
                 }
                 orderRepository.save(order);
+                if (Order.PAID.equals(order.getStatus())) {
+                    invoiceService.issueForOrder(order);
+                }
                 entityId = order.getId();
                 finalStatus = order.getStatus();
             }
@@ -230,6 +239,7 @@ public class PaymentController {
             }
         }
     }
+
 
     private boolean verifyResponseFingerprint(Map<String, String> body, BigDecimal amount) {
         String messageType = body.getOrDefault("messageType", "");

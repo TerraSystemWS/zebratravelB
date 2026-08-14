@@ -2,6 +2,7 @@ package cv.terrasystem.zebratravelb.order;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.invoice.InvoiceService;
 import cv.terrasystem.zebratravelb.product.Product;
 import cv.terrasystem.zebratravelb.product.ProductRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -10,9 +11,11 @@ import cv.terrasystem.zebratravelb.voucher.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,11 +26,14 @@ import java.util.Set;
 public class OrderController {
 
     private static final Set<String> PAYMENT_METHODS = Set.of(Order.ONLINE, Order.TRANSFER, Order.CASH);
+    private static final Set<String> COUNTER_SALE_PAYMENT_METHODS = Set.of(Order.TRANSFER, Order.CASH);
     private static final Set<String> FULFILLMENT_STATUSES = Set.of(Order.PENDING_SHIPMENT, Order.SHIPPED, Order.DELIVERED);
+    private static final Set<String> AWAITING_MANUAL_PAYMENT = Set.of(Order.AWAITING_TRANSFER, Order.AWAITING_CASH);
 
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final VoucherService voucherService;
+    private final InvoiceService invoiceService;
 
     @GetMapping("/mine")
     public List<OrderDto> getMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -54,12 +60,33 @@ public class OrderController {
         if (fulfillmentStatus == null || !FULFILLMENT_STATUSES.contains(fulfillmentStatus.toUpperCase())) {
             throw new BadRequestException("fulfillmentStatus inválido: " + fulfillmentStatus);
         }
-        // Não exigimos status == PAID: encomendas TRANSFER/CASH não têm hoje nenhum
-        // endpoint para serem marcadas como pagas manualmente (limitação conhecida,
-        // ver dev-notes.md secção 4) — bloquear aqui deixaria o envio delas impossível
-        // de sempre. O admin decide quando faz sentido tratar o envio.
+        // Não exigimos status == PAID: nem toda encomenda TRANSFER/CASH está paga no momento
+        // do envio (ver markPaid() para o fluxo normal) — o admin decide quando faz sentido
+        // tratar o envio, mesmo que ainda não tenha marcado o pagamento.
         order.setFulfillmentStatus(fulfillmentStatus.toUpperCase());
         return OrderDto.from(orderRepository.save(order));
+    }
+
+    // Fecha a lacuna já conhecida (ver tarefas.md/dev-notes.md): encomendas por Transferência
+    // ou Dinheiro não tinham nenhuma forma de serem marcadas como pagas — nem as feitas pelo
+    // cliente no site, nem as de venda ao balcão. Emite a fatura no mesmo passo (issueForOrder
+    // é idempotente, nunca duplica se já existir uma para esta encomenda).
+    // @Transactional aqui é importante: se a emissão da fatura falhar depois de gravar o
+    // estado PAID, sem isto a encomenda ficava presa em PAID sem fatura nenhuma e sem
+    // conseguir tentar de novo (mark-paid só aceita AWAITING_CASH/AWAITING_TRANSFER).
+    @PatchMapping("/{id}/mark-paid")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    @Transactional
+    public OrderDto markPaid(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Encomenda não encontrada: " + id));
+        if (!AWAITING_MANUAL_PAYMENT.contains(order.getStatus())) {
+            throw new BadRequestException("Só é possível marcar como paga uma encomenda à espera de transferência ou dinheiro");
+        }
+        order.setStatus(Order.PAID);
+        Order saved = orderRepository.save(order);
+        invoiceService.issueForOrder(saved, principal.getUser());
+        return OrderDto.from(saved);
     }
 
     @GetMapping("/{id}")
@@ -80,6 +107,7 @@ public class OrderController {
         Order order = new Order();
         order.setUser(principal.getUser());
         order.setPaymentMethod(request.paymentMethod().toUpperCase());
+        order.setCustomerNif(request.customerNif());
 
         // Um voucher só, válido para a encomenda inteira — a decisão de a que linha se aplica
         // (âmbito ALL/PRODUCT genérico ou um produto específico) é feita item a item abaixo,
@@ -89,9 +117,80 @@ public class OrderController {
             voucher = voucherService.validateCode(request.voucherCode(), Voucher.PRODUCT, null, principal.getUser());
         }
 
+        ItemsResult result = buildItems(order, request.items(), voucher);
+        if (voucher != null && result.totalDiscount().signum() == 0) {
+            throw new BadRequestException("Este voucher não se aplica a nenhum produto deste carrinho");
+        }
+        order.getItems().addAll(result.items());
+        order.setTotalAmount(result.total());
+
+        order.setStatus(switch (order.getPaymentMethod()) {
+            case Order.TRANSFER -> Order.AWAITING_TRANSFER;
+            case Order.CASH -> Order.AWAITING_CASH;
+            default -> Order.PENDING_PAYMENT;
+        });
+
+        Order saved = orderRepository.save(order);
+        if (voucher != null) {
+            voucherService.recordRedemption(voucher, principal.getUser(), result.totalDiscount(), null, null, saved);
+        }
+        return OrderDto.from(saved);
+    }
+
+    // Venda ao balcão: ADMIN/AGENTE cria a encomenda em nome de um cliente presente, sem
+    // conta. Fica em AWAITING_TRANSFER/AWAITING_CASH tal como uma encomenda normal por esses
+    // métodos — a fatura só é emitida quando markPaid() confirmar o pagamento, não aqui.
+    @PostMapping("/counter-sale")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
+    public OrderDto counterSale(@AuthenticationPrincipal UserPrincipal principal, @RequestBody CreateCounterSaleRequest request) {
+        if (request.items() == null || request.items().isEmpty()) {
+            throw new BadRequestException("O carrinho está vazio");
+        }
+        if (request.paymentMethod() == null || !COUNTER_SALE_PAYMENT_METHODS.contains(request.paymentMethod().toUpperCase())) {
+            throw new BadRequestException("Método de pagamento inválido para venda ao balcão");
+        }
+        if (request.guestName() == null || request.guestName().isBlank()) {
+            throw new BadRequestException("Nome do cliente é obrigatório");
+        }
+
+        Order order = new Order();
+        order.setGuestName(request.guestName());
+        order.setGuestEmail(request.guestEmail());
+        order.setCustomerNif(request.customerNif());
+        order.setPaymentMethod(request.paymentMethod().toUpperCase());
+
+        Voucher voucher = null;
+        if (request.voucherCode() != null && !request.voucherCode().isBlank()) {
+            voucher = voucherService.validateCode(request.voucherCode(), Voucher.PRODUCT, null, principal.getUser());
+        }
+
+        ItemsResult result = buildItems(order, request.items(), voucher);
+        if (voucher != null && result.totalDiscount().signum() == 0) {
+            throw new BadRequestException("Este voucher não se aplica a nenhum produto deste carrinho");
+        }
+        order.getItems().addAll(result.items());
+        order.setTotalAmount(result.total());
+        order.setStatus(Order.TRANSFER.equals(order.getPaymentMethod()) ? Order.AWAITING_TRANSFER : Order.AWAITING_CASH);
+
+        Order saved = orderRepository.save(order);
+        if (voucher != null) {
+            voucherService.recordRedemption(voucher, principal.getUser(), result.totalDiscount(), null, null, saved);
+        }
+        return OrderDto.from(saved);
+    }
+
+    private record ItemsResult(List<OrderItem> items, BigDecimal total, BigDecimal totalDiscount) {
+    }
+
+    // Partilhado por create() e counterSale() — preço nunca vem do cliente para itens com
+    // productId (recalculado a partir do Product, com a promoção fixa se houver), stock
+    // decrementado, voucher aplicado item a item quando não há promoção já ativa.
+    private ItemsResult buildItems(Order order, List<OrderItemInput> inputs, Voucher voucher) {
         BigDecimal total = BigDecimal.ZERO;
         BigDecimal totalDiscount = BigDecimal.ZERO;
-        for (OrderItemInput input : request.items()) {
+        List<OrderItem> items = new ArrayList<>();
+
+        for (OrderItemInput input : inputs) {
             if (input.quantity() == null || input.quantity() <= 0) {
                 throw new BadRequestException("Quantidade inválida para " + input.name());
             }
@@ -100,10 +199,6 @@ public class OrderController {
             item.setName(input.name());
             item.setQuantity(input.quantity());
 
-            // O preço nunca vem do cliente para itens com productId — é sempre recalculado a
-            // partir do Product (com a promoção fixa ativa, se houver), para o desconto (e a
-            // regra de não acumular com voucher) serem garantidos pelo servidor, não confiados
-            // ao pedido. Sem productId (caso raro/legado), mantém-se o preço enviado.
             BigDecimal unitPrice = input.price();
             if (input.productId() != null) {
                 Product product = productRepository.findById(input.productId()).orElse(null);
@@ -131,26 +226,11 @@ public class OrderController {
                 item.setProduct(product);
             }
             item.setPrice(unitPrice);
-            order.getItems().add(item);
+            items.add(item);
             total = total.add(unitPrice.multiply(BigDecimal.valueOf(input.quantity())));
         }
 
-        if (voucher != null && totalDiscount.signum() == 0) {
-            throw new BadRequestException("Este voucher não se aplica a nenhum produto deste carrinho");
-        }
-        order.setTotalAmount(total);
-
-        order.setStatus(switch (order.getPaymentMethod()) {
-            case Order.TRANSFER -> Order.AWAITING_TRANSFER;
-            case Order.CASH -> Order.AWAITING_CASH;
-            default -> Order.PENDING_PAYMENT;
-        });
-
-        Order saved = orderRepository.save(order);
-        if (voucher != null) {
-            voucherService.recordRedemption(voucher, principal.getUser(), totalDiscount, null, null, saved);
-        }
-        return OrderDto.from(saved);
+        return new ItemsResult(items, total, totalDiscount);
     }
 
     private Order findOwned(Integer userId, Integer id) {

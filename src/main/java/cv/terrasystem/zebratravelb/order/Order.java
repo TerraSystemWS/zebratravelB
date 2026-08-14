@@ -41,6 +41,18 @@ public class Order {
     @JoinColumn(name = "user_id")
     private User user;
 
+    // Preenchidos só numa venda ao balcão (ADMIN/AGENTE a vender a um cliente sem conta) —
+    // mesmo padrão de HotelReservation.guestName/Booking.guestName.
+    @Column(name = "guest_name")
+    private String guestName;
+    @Column(name = "guest_email")
+    private String guestEmail;
+
+    // Opcional, para qualquer encomenda (com ou sem conta) — sem ele, a fatura sai como
+    // "Consumidor Final" (ver invoice/InvoiceService).
+    @Column(name = "customer_nif")
+    private String customerNif;
+
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
 

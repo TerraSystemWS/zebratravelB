@@ -101,6 +101,12 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+        <!-- Geração de PDF das faturas — Java puro, sem custo de licença nem binário externo. -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>2.0.4</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
