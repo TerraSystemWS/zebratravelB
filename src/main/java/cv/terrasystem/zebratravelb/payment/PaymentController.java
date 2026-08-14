@@ -1,5 +1,7 @@
 package cv.terrasystem.zebratravelb.payment;
 
+import cv.terrasystem.zebratravelb.booking.Booking;
+import cv.terrasystem.zebratravelb.booking.BookingRepository;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.hotel.HotelReservation;
@@ -10,6 +12,7 @@ import cv.terrasystem.zebratravelb.order.OrderRepository;
 import cv.terrasystem.zebratravelb.product.Product;
 import cv.terrasystem.zebratravelb.product.ProductRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
+import cv.terrasystem.zebratravelb.voucher.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -34,8 +37,10 @@ public class PaymentController {
 
     private final OrderRepository orderRepository;
     private final HotelReservationRepository hotelReservationRepository;
+    private final BookingRepository bookingRepository;
     private final ProductRepository productRepository;
     private final Vinti4FingerprintService fingerprintService;
+    private final VoucherService voucherService;
 
     @Value("${app.vinti4.pos-id}")
     private String posId;
@@ -90,6 +95,27 @@ public class PaymentController {
         return buildFields(merchantRef, merchantSession, reservation.getTotalAmount());
     }
 
+    @PostMapping("/booking-fields/{bookingId}")
+    public Map<String, Object> getBookingPaymentFields(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + bookingId));
+        if (booking.getUser() == null || !booking.getUser().getId().equals(principal.getId())) {
+            throw new NotFoundException("Reserva não encontrada: " + bookingId);
+        }
+        if (!Booking.ONLINE.equals(booking.getPaymentMethod())) {
+            throw new BadRequestException("Esta reserva não usa pagamento online");
+        }
+
+        String merchantRef = "B" + booking.getId() + "-" + UUID.randomUUID().toString().substring(0, 8);
+        String merchantSession = "SB" + booking.getId() + "-" + UUID.randomUUID().toString().substring(0, 8);
+
+        booking.setMerchantRef(merchantRef);
+        booking.setMerchantSession(merchantSession);
+        bookingRepository.save(booking);
+
+        return buildFields(merchantRef, merchantSession, booking.getAmount());
+    }
+
     private Map<String, Object> buildFields(String merchantRef, String merchantSession, BigDecimal amount) {
         String timestamp = LocalDateTime.now().format(TS_FORMAT);
         String fingerprint = fingerprintService.generateRequestFingerprint(
@@ -124,16 +150,14 @@ public class PaymentController {
         ).getOrDefault(messageType, false);
 
         String merchantRef = body.get("merchantRespMerchantRef");
-        boolean isHotel = merchantRef != null && merchantRef.startsWith("H");
+        String prefix = merchantRef != null && !merchantRef.isEmpty() ? merchantRef.substring(0, 1) : "";
 
         String redirectPath;
         Integer entityId = null;
         String finalStatus = "FAILED";
 
-        if (isHotel) {
-            HotelReservation reservation = merchantRef != null
-                    ? hotelReservationRepository.findByMerchantRef(merchantRef).orElse(null)
-                    : null;
+        if ("H".equals(prefix)) {
+            HotelReservation reservation = hotelReservationRepository.findByMerchantRef(merchantRef).orElse(null);
             if (reservation != null) {
                 if (success) {
                     boolean valid = verifyResponseFingerprint(body, reservation.getTotalAmount());
@@ -142,10 +166,30 @@ public class PaymentController {
                     reservation.setStatus("true".equals(body.get("UserCancelled")) ? HotelReservation.CANCELLED : HotelReservation.FAILED);
                 }
                 hotelReservationRepository.save(reservation);
+                if (HotelReservation.CANCELLED.equals(reservation.getStatus()) || HotelReservation.FAILED.equals(reservation.getStatus())) {
+                    voucherService.releaseForHotelReservation(reservation.getId());
+                }
                 entityId = reservation.getId();
                 finalStatus = reservation.getStatus();
             }
             redirectPath = "/hotel/checkout/resultado";
+        } else if ("B".equals(prefix)) {
+            Booking booking = bookingRepository.findByMerchantRef(merchantRef).orElse(null);
+            if (booking != null) {
+                if (success) {
+                    boolean valid = verifyResponseFingerprint(body, booking.getAmount());
+                    booking.setStatus(valid ? Booking.CONFIRMED : Booking.FAILED);
+                } else {
+                    booking.setStatus("true".equals(body.get("UserCancelled")) ? Booking.CANCELLED : Booking.FAILED);
+                }
+                bookingRepository.save(booking);
+                if (Booking.CANCELLED.equals(booking.getStatus()) || Booking.FAILED.equals(booking.getStatus())) {
+                    voucherService.releaseForBooking(booking.getId());
+                }
+                entityId = booking.getId();
+                finalStatus = booking.getStatus();
+            }
+            redirectPath = "/excurcoes/checkout/resultado";
         } else {
             Order order = merchantRef != null ? orderRepository.findByMerchantRef(merchantRef).orElse(null) : null;
             if (order != null) {
@@ -159,6 +203,7 @@ public class PaymentController {
                 boolean paymentDidNotGoThrough = !Order.PAID.equals(order.getStatus());
                 if (Order.PENDING_PAYMENT.equals(previousStatus) && paymentDidNotGoThrough) {
                     restoreStock(order);
+                    voucherService.releaseForOrder(order.getId());
                 }
                 orderRepository.save(order);
                 entityId = order.getId();

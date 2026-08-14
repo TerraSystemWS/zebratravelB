@@ -20,6 +20,19 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class Booking {
 
+    public static final String ONLINE = "ONLINE";
+    public static final String TRANSFER = "TRANSFER";
+    public static final String CASH = "CASH";
+
+    public static final String PENDING = "PENDING";
+    public static final String PENDING_PAYMENT = "PENDING_PAYMENT";
+    public static final String AWAITING_TRANSFER = "AWAITING_TRANSFER";
+    public static final String AWAITING_CASH = "AWAITING_CASH";
+    // "CONFIRMED" já significa "confirmada e paga" — mesmo padrão simplificado de HotelReservation.
+    public static final String CONFIRMED = "CONFIRMED";
+    public static final String CANCELLED = "CANCELLED";
+    public static final String FAILED = "FAILED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -43,16 +56,33 @@ public class Booking {
     @Column(name = "item_name", nullable = false)
     private String itemName;
 
+    // Preenchidos quando o participante é adicionado manualmente por ADMIN/AGENTE (Grupo Travel
+    // do dashboard) e não tem conta de cliente — mesmo padrão de HotelReservation.guestName/etc.
+    @Column(name = "guest_name")
+    private String guestName;
+    @Column(name = "guest_email")
+    private String guestEmail;
+    @Column(name = "guest_phone")
+    private String guestPhone;
+
     @Column(name = "booking_date", nullable = false)
     private LocalDate bookingDate;
 
-    // "CONFIRMED" já significa "confirmada e paga" — mesmo padrão simplificado
-    // usado em HotelReservation (ver Booking.java history / dev-notes secção 3).
     @Column(nullable = false)
-    private String status = "PENDING";
+    private String status = PENDING;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
+
+    // Preenchidos só para reservas de Excursão feitas pelo cliente (ver BookingController.create) —
+    // participantes de Grupo Travel adicionados manualmente pelo admin/agente não passam pelo
+    // gateway, ficam sempre null aqui (mesmo padrão de HotelReservation, secção 3/8 do dev-notes).
+    @Column(name = "payment_method")
+    private String paymentMethod;
+    @Column(name = "merchant_ref")
+    private String merchantRef;
+    @Column(name = "merchant_session")
+    private String merchantSession;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

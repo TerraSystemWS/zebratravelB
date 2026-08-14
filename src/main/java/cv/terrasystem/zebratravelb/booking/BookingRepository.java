@@ -7,13 +7,16 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface BookingRepository extends JpaRepository<Booking, Integer> {
     List<Booking> findByUserId(Integer userId);
     boolean existsByExcursion_SlugAndUser_IdAndStatusIn(String slug, Integer userId, List<String> statuses);
+    boolean existsByExcursionGroup_IdAndUser_IdAndStatusIn(Integer excursionGroupId, Integer userId, List<String> statuses);
     boolean existsByExcursion_Id(Integer excursionId);
     boolean existsByTour_Id(Integer tourId);
     boolean existsByUserId(Integer userId);
+    Optional<Booking> findByMerchantRef(String merchantRef);
 
     @Query("""
             select coalesce(sum(b.amount), 0) from Booking b

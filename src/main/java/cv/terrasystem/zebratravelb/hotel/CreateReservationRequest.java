@@ -7,6 +7,7 @@ public record CreateReservationRequest(
         LocalDate checkIn,
         LocalDate checkOut,
         Integer guests,
-        String paymentMethod
+        String paymentMethod,
+        String voucherCode   // opcional
 ) {
 }

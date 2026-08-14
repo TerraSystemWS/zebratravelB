@@ -3,8 +3,11 @@ package cv.terrasystem.zebratravelb.product;
 import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.common.OwnershipGuard;
+import cv.terrasystem.zebratravelb.favorite.Favorite;
+import cv.terrasystem.zebratravelb.favorite.FavoriteRepository;
 import cv.terrasystem.zebratravelb.order.OrderItemRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
+import cv.terrasystem.zebratravelb.voucher.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,20 +24,27 @@ public class ProductController {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
     private final OrderItemRepository orderItemRepository;
-    private final FavoriteProductRepository favoriteProductRepository;
+    private final FavoriteRepository favoriteRepository;
     private final CartItemRepository cartItemRepository;
+    private final VoucherService voucherService;
 
     @GetMapping
     public List<ProductDto> getAll(@RequestParam(defaultValue = "false") boolean includeArchived) {
         return productRepository.findAll().stream()
                 .filter(p -> includeArchived || !"ARCHIVED".equals(p.getStatus()))
-                .map(ProductDto::from)
+                .map(this::withPromotion)
                 .toList();
     }
 
     @GetMapping("/{id}")
     public ProductDto getById(@PathVariable Integer id) {
-        return ProductDto.from(find(id));
+        return withPromotion(find(id));
+    }
+
+    private ProductDto withPromotion(Product product) {
+        return voucherService.findActivePromotion(product.getId())
+                .map(promo -> ProductDto.from(product, promo.getDiscountPercent(), voucherService.applyDiscount(promo, product.getPrice())))
+                .orElseGet(() -> ProductDto.from(product));
     }
 
     @PostMapping
@@ -60,7 +70,7 @@ public class ProductController {
         Product product = find(id);
         OwnershipGuard.requireOwnerOrAdmin(principal, product.getCreatedBy());
         if (orderItemRepository.existsByProduct_Id(product.getId())
-                || favoriteProductRepository.existsByProductId(product.getId())
+                || favoriteRepository.existsByItemTypeAndItemId(Favorite.PRODUCT, product.getId())
                 || cartItemRepository.existsByProductId(product.getId())) {
             throw new ConflictException("Não é possível apagar: existem encomendas, favoritos ou carrinhos com este produto. Arquive em vez de apagar.");
         }

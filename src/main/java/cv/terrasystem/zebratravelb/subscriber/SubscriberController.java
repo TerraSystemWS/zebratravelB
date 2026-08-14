@@ -20,13 +20,18 @@ public class SubscriberController {
     private final SubscriberRepository subscriberRepository;
     private final SubscriberService subscriberService;
 
+    // Achado ao investigar um bug idêntico em ContactMessageController: "void" devolve 200 com
+    // corpo vazio, e o cliente público (zebratravel/lib/api.ts) tenta sempre um res.json(), que
+    // rebenta em corpo vazio — a subscrição à newsletter ficava sempre a mostrar erro ao
+    // visitante mesmo quando o email era guardado com sucesso.
     @PostMapping
-    public void subscribe(@RequestBody SubscribeRequest request) {
+    public ResponseEntity<Void> subscribe(@RequestBody SubscribeRequest request) {
         String email = request.email() != null ? request.email().trim().toLowerCase() : null;
         if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
             throw new BadRequestException("Email inválido");
         }
         subscriberService.subscribeIfAbsent(email);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping

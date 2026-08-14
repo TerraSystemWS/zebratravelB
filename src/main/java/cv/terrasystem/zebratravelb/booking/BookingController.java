@@ -10,6 +10,8 @@ import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.tour.Tour;
 import cv.terrasystem.zebratravelb.tour.TourRepository;
 import cv.terrasystem.zebratravelb.user.Role;
+import cv.terrasystem.zebratravelb.voucher.Voucher;
+import cv.terrasystem.zebratravelb.voucher.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -18,16 +20,25 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
 public class BookingController {
 
+    private static final Set<String> PAYMENT_METHODS = Set.of(Booking.ONLINE, Booking.TRANSFER, Booking.CASH);
+    // Reservas ainda "ativas" neste grupo — um cliente com uma destas não pode voltar a
+    // reservar o mesmo grupo (ver dedupe em create()). Não bloqueia grupos diferentes da
+    // mesma excursão (ex: um grupo já CONFIRMED/COMPLETED anterior).
+    private static final List<String> ACTIVE_GROUP_STATUSES = List.of(Booking.PENDING, Booking.PENDING_PAYMENT,
+            Booking.AWAITING_TRANSFER, Booking.AWAITING_CASH, Booking.CONFIRMED);
+
     private final BookingRepository bookingRepository;
     private final ExcursionRepository excursionRepository;
     private final ExcursionGroupRepository excursionGroupRepository;
     private final TourRepository tourRepository;
+    private final VoucherService voucherService;
 
     @GetMapping
     public List<BookingDto> getAll(@AuthenticationPrincipal UserPrincipal principal) {
@@ -57,14 +68,30 @@ public class BookingController {
         Booking booking = new Booking();
         booking.setUser(principal.getUser());
         booking.setBookingDate(request.date());
-        booking.setStatus("PENDING");
+
+        Voucher voucher = null;
+        BigDecimal discountAmount = BigDecimal.ZERO;
 
         if (hasExcursion) {
+            // Só Excursões passam pelo gateway de pagamento — Destinos (Tour) continuam PENDING
+            // simples, resolvido manualmente pelo admin, sem alterações a esse fluxo.
+            String paymentMethod = request.paymentMethod();
+            if (paymentMethod == null || !PAYMENT_METHODS.contains(paymentMethod.toUpperCase())) {
+                throw new BadRequestException("Método de pagamento inválido");
+            }
+            paymentMethod = paymentMethod.toUpperCase();
+
             Excursion excursion = excursionRepository.findBySlug(request.excursionSlug())
                     .orElseThrow(() -> new NotFoundException("Excursão não encontrada: " + request.excursionSlug()));
             booking.setExcursion(excursion);
             booking.setItemName(excursion.getTitle());
-            booking.setAmount(excursion.getPrice().multiply(BigDecimal.valueOf(guests)));
+            BigDecimal baseAmount = excursion.getPrice().multiply(BigDecimal.valueOf(guests));
+            if (request.voucherCode() != null && !request.voucherCode().isBlank()) {
+                voucher = voucherService.validateCode(request.voucherCode(), Voucher.EXCURSION, excursion.getId(), principal.getUser());
+            }
+            BigDecimal finalAmount = voucher != null ? voucherService.applyDiscount(voucher, baseAmount) : baseAmount;
+            discountAmount = baseAmount.subtract(finalAmount);
+            booking.setAmount(finalAmount);
             // Uma excursão confirmada não pode receber mais reservas no mesmo grupo —
             // se já não há nenhum grupo OPEN (porque o único existente está CONFIRMED
             // ou COMPLETED, ou porque é a primeira reserva de sempre), abre-se um novo.
@@ -76,16 +103,32 @@ public class BookingController {
                         g.setStatus("OPEN");
                         return excursionGroupRepository.save(g);
                     });
+            // Um cliente não pode reservar duas vezes o mesmo grupo de viagem — não bloqueia
+            // reservar a mesma excursão outra vez num grupo diferente (futuro, já confirmado/completado).
+            if (bookingRepository.existsByExcursionGroup_IdAndUser_IdAndStatusIn(group.getId(), principal.getId(), ACTIVE_GROUP_STATUSES)) {
+                throw new BadRequestException("Já tens uma reserva neste grupo de viagem");
+            }
             booking.setExcursionGroup(group);
+            booking.setPaymentMethod(paymentMethod);
+            booking.setStatus(switch (paymentMethod) {
+                case Booking.TRANSFER -> Booking.AWAITING_TRANSFER;
+                case Booking.CASH -> Booking.AWAITING_CASH;
+                default -> Booking.PENDING_PAYMENT;
+            });
         } else {
             Tour tour = tourRepository.findById(request.tourId())
                     .orElseThrow(() -> new NotFoundException("Destino não encontrado: " + request.tourId()));
             booking.setTour(tour);
             booking.setItemName(tour.getTitle());
             booking.setAmount(tour.getPrice().multiply(BigDecimal.valueOf(guests)));
+            booking.setStatus(Booking.PENDING);
         }
 
-        return BookingDto.from(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        if (voucher != null) {
+            voucherService.recordRedemption(voucher, principal.getUser(), discountAmount, saved, null, null);
+        }
+        return BookingDto.from(saved);
     }
 
     @PatchMapping("/{id}/status")
@@ -93,8 +136,13 @@ public class BookingController {
     public BookingDto updateStatus(@PathVariable Integer id, @RequestBody Map<String, String> body) {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
-        booking.setStatus(body.get("status").toUpperCase());
-        return BookingDto.from(bookingRepository.save(booking));
+        String status = body.get("status").toUpperCase();
+        booking.setStatus(status);
+        Booking saved = bookingRepository.save(booking);
+        if (Booking.CANCELLED.equals(status)) {
+            voucherService.releaseForBooking(saved.getId());
+        }
+        return BookingDto.from(saved);
     }
 
 }

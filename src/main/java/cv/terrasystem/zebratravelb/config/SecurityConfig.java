@@ -61,7 +61,8 @@ public class SecurityConfig {
     // Endpoints POST públicos (sem autenticação) — formulários do site que não exigem login.
     private static final String[] PUBLIC_POST_PATHS = {
             "/api/subscribers",
-            "/api/job-applications"
+            "/api/job-applications",
+            "/api/contact-messages"
     };
 
     @Bean

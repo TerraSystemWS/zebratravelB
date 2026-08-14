@@ -5,6 +5,9 @@ import cv.terrasystem.zebratravelb.common.ConflictException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
 import cv.terrasystem.zebratravelb.user.Role;
+import cv.terrasystem.zebratravelb.user.User;
+import cv.terrasystem.zebratravelb.voucher.Voucher;
+import cv.terrasystem.zebratravelb.voucher.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,6 +44,7 @@ public class HotelReservationController {
 
     private final HotelReservationRepository reservationRepository;
     private final HotelRoomRepository roomRepository;
+    private final VoucherService voucherService;
 
     @GetMapping("/mine")
     public List<ReservationDto> getMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -77,8 +81,7 @@ public class HotelReservationController {
         reservation.setUser(principal.getUser());
         reservation.setCheckIn(request.checkIn());
         reservation.setCheckOut(request.checkOut());
-        reservation.setGuests(request.guests() != null && request.guests() > 0 ? request.guests() : 1);
-        reservation.setTotalAmount(computeTotal(room, request.checkIn(), request.checkOut()));
+        reservation.setGuests(resolveGuests(room, request.guests()));
         reservation.setPaymentMethod(request.paymentMethod().toUpperCase());
         reservation.setStatus(switch (reservation.getPaymentMethod()) {
             case HotelReservation.TRANSFER -> HotelReservation.AWAITING_TRANSFER;
@@ -86,7 +89,16 @@ public class HotelReservationController {
             default -> HotelReservation.PENDING_PAYMENT;
         });
 
-        return ReservationDto.from(reservationRepository.save(reservation));
+        BigDecimal baseAmount = computeTotal(room, request.checkIn(), request.checkOut());
+        Voucher voucher = resolveVoucher(request.voucherCode(), room, principal.getUser());
+        BigDecimal finalAmount = voucher != null ? voucherService.applyDiscount(voucher, baseAmount) : baseAmount;
+        reservation.setTotalAmount(finalAmount);
+
+        HotelReservation saved = reservationRepository.save(reservation);
+        if (voucher != null) {
+            voucherService.recordRedemption(voucher, principal.getUser(), baseAmount.subtract(finalAmount), null, saved, null);
+        }
+        return ReservationDto.from(saved);
     }
 
     @PostMapping("/admin")
@@ -109,32 +121,44 @@ public class HotelReservationController {
         reservation.setGuestPhone(request.guestPhone());
         reservation.setCheckIn(request.checkIn());
         reservation.setCheckOut(request.checkOut());
-        reservation.setGuests(request.guests() != null && request.guests() > 0 ? request.guests() : 1);
-        reservation.setTotalAmount(computeTotal(room, request.checkIn(), request.checkOut()));
+        reservation.setGuests(resolveGuests(room, request.guests()));
         reservation.setPaymentMethod(request.paymentMethod().toUpperCase());
         reservation.setCreatedBy(principal.getUser());
 
         String status = request.status();
         if (status != null && !status.isBlank()) {
-            validateAdminSettableStatus(principal, status);
+            validateAdminSettableStatus(status);
             reservation.setStatus(status.toUpperCase());
         } else {
             reservation.setStatus(HotelReservation.CONFIRMED);
         }
 
-        return ReservationDto.from(reservationRepository.save(reservation));
+        BigDecimal baseAmount = computeTotal(room, request.checkIn(), request.checkOut());
+        Voucher voucher = resolveVoucher(request.voucherCode(), room, principal.getUser());
+        BigDecimal finalAmount = voucher != null ? voucherService.applyDiscount(voucher, baseAmount) : baseAmount;
+        reservation.setTotalAmount(finalAmount);
+
+        HotelReservation saved = reservationRepository.save(reservation);
+        if (voucher != null) {
+            voucherService.recordRedemption(voucher, principal.getUser(), baseAmount.subtract(finalAmount), null, saved, null);
+        }
+        return ReservationDto.from(saved);
     }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'AGENTE')")
-    public ReservationDto updateStatus(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Integer id, @RequestBody Map<String, String> body) {
+    public ReservationDto updateStatus(@PathVariable Integer id, @RequestBody Map<String, String> body) {
         HotelReservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Reserva não encontrada: " + id));
         requireNotCheckedOut(reservation);
         String status = body.get("status");
-        validateAdminSettableStatus(principal, status);
+        validateAdminSettableStatus(status);
         reservation.setStatus(status.toUpperCase());
-        return ReservationDto.from(reservationRepository.save(reservation));
+        HotelReservation saved = reservationRepository.save(reservation);
+        if (HotelReservation.CANCELLED.equals(saved.getStatus())) {
+            voucherService.releaseForHotelReservation(saved.getId());
+        }
+        return ReservationDto.from(saved);
     }
 
     private void requireNotCheckedOut(HotelReservation reservation) {
@@ -143,13 +167,9 @@ public class HotelReservationController {
         }
     }
 
-    private void validateAdminSettableStatus(UserPrincipal principal, String status) {
+    private void validateAdminSettableStatus(String status) {
         if (status == null || !ADMIN_SETTABLE_STATUSES.contains(status.toUpperCase())) {
             throw new BadRequestException("Estado inválido: " + status);
-        }
-        boolean isAdmin = principal.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        if (!isAdmin && HotelReservation.ON_HOLD.equals(status.toUpperCase())) {
-            throw new BadRequestException("Só um admin pode colocar uma reserva em espera");
         }
     }
 
@@ -215,8 +235,28 @@ public class HotelReservationController {
         if (!isAdmin && !NOT_YET_PAID_STATUSES.contains(reservation.getStatus())) {
             throw new BadRequestException("Só um admin pode apagar uma reserva em espera");
         }
+        // Libertar o voucher ANTES de apagar: a FK hotel_reservation_id tem ON DELETE SET
+        // NULL, e o delete despoleta um flush automático antes da query de libertação, que
+        // deixaria de encontrar a redemption (já com a FK a null) se corresse depois.
+        voucherService.releaseForHotelReservation(id);
         reservationRepository.delete(reservation);
         return ResponseEntity.noContent().build();
+    }
+
+    private Voucher resolveVoucher(String voucherCode, HotelRoom room, User user) {
+        if (voucherCode == null || voucherCode.isBlank()) {
+            return null;
+        }
+        return voucherService.validateCode(voucherCode, Voucher.ROOM, room.getRoomType().getId(), user);
+    }
+
+    private int resolveGuests(HotelRoom room, Integer requested) {
+        int guests = requested != null && requested > 0 ? requested : 1;
+        int capacity = room.getRoomType().getCapacity();
+        if (guests > capacity) {
+            throw new BadRequestException("Número de hóspedes excede a capacidade do quarto (máx. " + capacity + ")");
+        }
+        return guests;
     }
 
     private HotelRoom requireRoom(Integer roomId) {

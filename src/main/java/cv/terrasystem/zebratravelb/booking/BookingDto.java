@@ -19,8 +19,10 @@ public record BookingDto(
     public static BookingDto from(Booking b) {
         return new BookingDto(
                 b.getId(),
-                b.getUser() != null ? (b.getUser().getFullName() != null ? b.getUser().getFullName() : b.getUser().getUsername()) : "N/A",
-                b.getUser() != null ? b.getUser().getEmail() : null,
+                b.getUser() != null
+                        ? (b.getUser().getFullName() != null ? b.getUser().getFullName() : b.getUser().getUsername())
+                        : (b.getGuestName() != null ? b.getGuestName() : "N/A"),
+                b.getUser() != null ? b.getUser().getEmail() : b.getGuestEmail(),
                 b.getItemName(),
                 b.getBookingDate(),
                 b.getStatus(),
