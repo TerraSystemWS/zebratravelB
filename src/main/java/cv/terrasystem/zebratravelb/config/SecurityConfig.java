@@ -55,14 +55,16 @@ public class SecurityConfig {
             "/api/rooms/*",
             "/api/rooms/*/reviews",
             "/api/excursions/*/reviews",
-            "/api/hotel-amenities"
+            "/api/hotel-amenities",
+            "/api/campaigns/active"
     };
 
     // Endpoints POST públicos (sem autenticação) — formulários do site que não exigem login.
     private static final String[] PUBLIC_POST_PATHS = {
             "/api/subscribers",
             "/api/job-applications",
-            "/api/contact-messages"
+            "/api/contact-messages",
+            "/api/campaigns/*/click"
     };
 
     @Bean
