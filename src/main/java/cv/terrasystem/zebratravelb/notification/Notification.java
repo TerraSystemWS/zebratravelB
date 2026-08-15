@@ -19,6 +19,7 @@ public class Notification {
     public static final String CONTACT_MESSAGE = "CONTACT_MESSAGE";
     public static final String REVIEW = "REVIEW";
     public static final String JOB_APPLICATION = "JOB_APPLICATION";
+    public static final String ORDER = "ORDER";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

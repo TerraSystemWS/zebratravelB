@@ -3,6 +3,8 @@ package cv.terrasystem.zebratravelb.order;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.invoice.InvoiceService;
+import cv.terrasystem.zebratravelb.notification.Notification;
+import cv.terrasystem.zebratravelb.notification.NotificationService;
 import cv.terrasystem.zebratravelb.product.Product;
 import cv.terrasystem.zebratravelb.product.ProductRepository;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
@@ -34,6 +36,7 @@ public class OrderController {
     private final ProductRepository productRepository;
     private final VoucherService voucherService;
     private final InvoiceService invoiceService;
+    private final NotificationService notificationService;
 
     @GetMapping("/mine")
     public List<OrderDto> getMine(@AuthenticationPrincipal UserPrincipal principal) {
@@ -134,6 +137,8 @@ public class OrderController {
         if (voucher != null) {
             voucherService.recordRedemption(voucher, principal.getUser(), result.totalDiscount(), null, null, saved);
         }
+        notificationService.notify(Notification.ORDER, "Nova encomenda na loja",
+                itemsSummary(saved), "/dashboard/loja/encomendas", saved.getId());
         return OrderDto.from(saved);
     }
 
@@ -180,6 +185,13 @@ public class OrderController {
     }
 
     private record ItemsResult(List<OrderItem> items, BigDecimal total, BigDecimal totalDiscount) {
+    }
+
+    private String itemsSummary(Order order) {
+        return order.getItems().stream()
+                .map(item -> item.getQuantity() + "× " + item.getName())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
     }
 
     // Partilhado por create() e counterSale() — preço nunca vem do cliente para itens com
