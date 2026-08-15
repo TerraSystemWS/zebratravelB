@@ -10,4 +10,5 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     Optional<Invoice> findBySourceTypeAndSourceId(String sourceType, Integer sourceId);
     List<Invoice> findByUser_IdOrderByCreatedAtDesc(Integer userId);
     List<Invoice> findAllByOrderByCreatedAtDesc();
+    Optional<Invoice> findBySeriesAndYearAndNumber(String series, Integer year, Integer number);
 }

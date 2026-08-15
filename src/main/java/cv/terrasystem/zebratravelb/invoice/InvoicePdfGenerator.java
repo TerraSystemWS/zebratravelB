@@ -1,18 +1,31 @@
 package cv.terrasystem.zebratravelb.invoice;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import javax.imageio.ImageIO;
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 
 @Component
+@RequiredArgsConstructor
 public class InvoicePdfGenerator {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -21,15 +34,15 @@ public class InvoicePdfGenerator {
     private static final Font NORMAL_FONT = FontFactory.getFont(FontFactory.HELVETICA, 10);
     private static final Font SMALL_FONT = FontFactory.getFont(FontFactory.HELVETICA, 8, Font.ITALIC, Color.GRAY);
     private static final Font TABLE_HEADER_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.WHITE);
+    private static final Font CODE_FONT = FontFactory.getFont(FontFactory.COURIER, 8, Color.DARK_GRAY);
 
-    @Value("${app.invoice.company-name}")
-    private String companyName;
-    @Value("${app.invoice.company-address}")
-    private String companyAddress;
-    @Value("${app.invoice.company-nif}")
-    private String companyNif;
-    @Value("${app.invoice.company-email}")
-    private String companyEmail;
+    private final InvoiceCompanyProfileService companyProfileService;
+
+    @Value("${app.media.upload-dir}")
+    private String mediaUploadDir;
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     public byte[] generate(Invoice invoice) throws IOException {
         Document document = new Document(PageSize.A4, 40, 40, 50, 50);
@@ -46,7 +59,8 @@ public class InvoicePdfGenerator {
             document.add(Chunk.NEWLINE);
             document.add(totalsTable(invoice));
             document.add(Chunk.NEWLINE);
-            document.add(footer());
+            document.add(Chunk.NEWLINE);
+            document.add(verificationBlock(invoice));
         } catch (DocumentException e) {
             throw new IOException("Erro ao gerar o PDF da fatura", e);
         } finally {
@@ -64,13 +78,22 @@ public class InvoicePdfGenerator {
             // larguras inválidas nunca acontecem aqui (array fixo), mas a API declara a exceção
         }
 
-        Paragraph company = new Paragraph();
-        company.add(new Paragraph(companyName, TITLE_FONT));
-        company.add(new Paragraph(companyAddress, NORMAL_FONT));
-        company.add(new Paragraph("NIF: " + companyNif, NORMAL_FONT));
-        company.add(new Paragraph(companyEmail, NORMAL_FONT));
-        PdfPCell companyCell = new PdfPCell(company);
+        InvoiceCompanyProfile profile = companyProfileService.get();
+
+        PdfPCell companyCell = new PdfPCell();
         companyCell.setBorder(Rectangle.NO_BORDER);
+        Image logo = loadLogo(profile.logoPath());
+        if (logo != null) {
+            logo.scaleToFit(120, 50);
+            companyCell.addElement(logo);
+        }
+        companyCell.addElement(new Paragraph(profile.name(), TITLE_FONT));
+        if (profile.legalName() != null && !profile.legalName().isBlank() && !profile.legalName().equalsIgnoreCase(profile.name())) {
+            companyCell.addElement(new Paragraph(profile.legalName(), NORMAL_FONT));
+        }
+        companyCell.addElement(new Paragraph(profile.address(), NORMAL_FONT));
+        companyCell.addElement(new Paragraph("NIF: " + profile.nif(), NORMAL_FONT));
+        companyCell.addElement(new Paragraph(profile.email(), NORMAL_FONT));
         table.addCell(companyCell);
 
         Paragraph doc = new Paragraph();
@@ -83,6 +106,23 @@ public class InvoicePdfGenerator {
         table.addCell(docCell);
 
         return table;
+    }
+
+    // Nunca falha a geração do PDF por causa do logótipo — se o ficheiro não existir ou não
+    // for legível como imagem, a fatura sai só com o texto (sempre foi assim antes de haver logo).
+    private Image loadLogo(String logoPath) {
+        if (logoPath == null || logoPath.isBlank()) {
+            return null;
+        }
+        try {
+            Path path = Paths.get(mediaUploadDir, logoPath);
+            if (!Files.exists(path)) {
+                return null;
+            }
+            return Image.getInstance(Files.readAllBytes(path));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Paragraph customerBlock(Invoice invoice) {
@@ -163,10 +203,75 @@ public class InvoicePdfGenerator {
     // não foi confirmado (ver tarefas.md, secção PraDepois). Não assumir nenhuma isenção
     // específica aqui sem confirmação — mostrar isso incorretamente num documento fiscal
     // seria pior do que não mostrar nada.
-    private Paragraph footer() {
-        Paragraph p = new Paragraph("Documento emitido pelo sistema ZebraTravel.", SMALL_FONT);
-        p.setAlignment(Element.ALIGN_CENTER);
-        return p;
+    //
+    // Código de verificação + QR code: aponta para uma página pública em zebratravel.net que
+    // recalcula a assinatura HMAC (InvoiceSigningService) e confirma se o documento é genuíno —
+    // qualquer alteração aos valores da fatura (ou uma tentativa de forjar uma do zero) faz a
+    // verificação falhar, mesmo para quem tenha acesso ao painel de administração.
+    private PdfPTable verificationBlock(Invoice invoice) {
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        try {
+            table.setWidths(new float[]{3, 1});
+        } catch (DocumentException ignored) {
+        }
+
+        Paragraph note = new Paragraph();
+        note.add(new Paragraph("Documento emitido pelo sistema ZebraTravel.", SMALL_FONT));
+        note.add(new Paragraph("Verifique a autenticidade em " + frontendUrl + "/faturas/verificar", SMALL_FONT));
+        PdfPCell noteCell = new PdfPCell(note);
+        noteCell.setBorder(Rectangle.NO_BORDER);
+        noteCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        table.addCell(noteCell);
+
+        PdfPCell qrCell = new PdfPCell();
+        qrCell.setBorder(Rectangle.NO_BORDER);
+        qrCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        String signature = invoice.getSignature();
+        if (signature != null && !signature.isBlank()) {
+            try {
+                Image qr = Image.getInstance(generateQrPng(verificationUrl(invoice), 120));
+                qr.scaleToFit(65, 65);
+                qr.setAlignment(Element.ALIGN_RIGHT);
+                qrCell.addElement(qr);
+            } catch (Exception ignored) {
+                // sem QR se algo falhar — o código de texto abaixo continua a servir para verificar manualmente
+            }
+            Paragraph code = new Paragraph(formatVerificationCode(signature), CODE_FONT);
+            code.setAlignment(Element.ALIGN_RIGHT);
+            qrCell.addElement(code);
+        }
+        table.addCell(qrCell);
+
+        return table;
+    }
+
+    private byte[] generateQrPng(String data, int size) throws Exception {
+        BitMatrix matrix = new QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, size, size);
+        BufferedImage img = MatrixToImageWriter.toBufferedImage(matrix);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", baos);
+        return baos.toByteArray();
+    }
+
+    private String verificationUrl(Invoice invoice) {
+        String doc = URLEncoder.encode(invoice.documentNumber(), StandardCharsets.UTF_8);
+        return frontendUrl + "/faturas/verificar?doc=" + doc + "&sig=" + invoice.getSignature();
+    }
+
+    // Primeiros 16 caracteres da assinatura, em maiúsculas e agrupados de 4 em 4 — só para
+    // leitura/digitação manual caso o QR code não seja prático (impressão em papel, por
+    // exemplo); a verificação real usa a assinatura completa gravada na fatura.
+    private String formatVerificationCode(String signature) {
+        String code = signature.substring(0, Math.min(16, signature.length())).toUpperCase();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < code.length(); i++) {
+            if (i > 0 && i % 4 == 0) {
+                sb.append('-');
+            }
+            sb.append(code.charAt(i));
+        }
+        return sb.toString();
     }
 
     private String formatMoney(java.math.BigDecimal amount, String currency) {

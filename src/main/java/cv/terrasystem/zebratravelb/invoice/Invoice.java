@@ -81,6 +81,12 @@ public class Invoice {
     @Column(nullable = false)
     private String status = ISSUED;
 
+    // HMAC-SHA256 do conteúdo da fatura (ver InvoiceSigningService) — impresso no PDF como
+    // código de verificação/QR code, para que o documento não possa ser forjado nem alterado
+    // sem a assinatura deixar de bater certo com uma nova verificação.
+    @Column(length = 64)
+    private String signature;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by")
     private User createdBy;

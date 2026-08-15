@@ -56,7 +56,8 @@ public class SecurityConfig {
             "/api/rooms/*/reviews",
             "/api/excursions/*/reviews",
             "/api/hotel-amenities",
-            "/api/campaigns/active"
+            "/api/campaigns/active",
+            "/api/invoices/verify"
     };
 
     // Endpoints POST públicos (sem autenticação) — formulários do site que não exigem login.

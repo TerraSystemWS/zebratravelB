@@ -34,6 +34,7 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final InvoiceSequenceRepository sequenceRepository;
     private final InvoicePdfGenerator pdfGenerator;
+    private final InvoiceSigningService signingService;
 
     @Value("${app.documents.upload-dir}")
     private String documentsDir;
@@ -150,6 +151,9 @@ public class InvoiceService {
         }
         invoice.setSubtotal(total);
         invoice.setTotalAmount(total);
+        // Assinado com todos os dados já fixados, exceto o id auto-gerado (dispensável — o
+        // número do documento já é único por si só) — ver InvoiceSigningService.
+        invoice.setSignature(signingService.sign(invoice));
 
         Invoice saved = invoiceRepository.save(invoice);
         attachPdf(saved);
