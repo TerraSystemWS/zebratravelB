@@ -2,6 +2,7 @@ package cv.terrasystem.zebratravelb.subscriber;
 
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
+import cv.terrasystem.zebratravelb.security.turnstile.TurnstileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,7 @@ public class SubscriberController {
 
     private final SubscriberRepository subscriberRepository;
     private final SubscriberService subscriberService;
+    private final TurnstileService turnstileService;
 
     // Achado ao investigar um bug idêntico em ContactMessageController: "void" devolve 200 com
     // corpo vazio, e o cliente público (zebratravel/lib/api.ts) tenta sempre um res.json(), que
@@ -26,6 +28,7 @@ public class SubscriberController {
     // visitante mesmo quando o email era guardado com sucesso.
     @PostMapping
     public ResponseEntity<Void> subscribe(@RequestBody SubscribeRequest request) {
+        turnstileService.verify(request.turnstileToken());
         String email = request.email() != null ? request.email().trim().toLowerCase() : null;
         if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
             throw new BadRequestException("Email inválido");

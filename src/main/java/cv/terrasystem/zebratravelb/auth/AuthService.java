@@ -3,6 +3,7 @@ package cv.terrasystem.zebratravelb.auth;
 import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.security.JwtService;
 import cv.terrasystem.zebratravelb.security.UserPrincipal;
+import cv.terrasystem.zebratravelb.security.turnstile.TurnstileService;
 import cv.terrasystem.zebratravelb.subscriber.SubscriberService;
 import cv.terrasystem.zebratravelb.user.Role;
 import cv.terrasystem.zebratravelb.user.RoleRepository;
@@ -25,9 +26,11 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final SubscriberService subscriberService;
+    private final TurnstileService turnstileService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        turnstileService.verify(request.turnstileToken());
         if (userRepository.existsByEmail(request.email())) {
             throw new BadRequestException("Este email já está registado");
         }
@@ -50,6 +53,7 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        turnstileService.verify(request.turnstileToken());
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.email(), request.password()));
 

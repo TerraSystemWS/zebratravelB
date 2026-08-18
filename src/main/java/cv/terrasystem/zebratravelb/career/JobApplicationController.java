@@ -4,6 +4,7 @@ import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.notification.Notification;
 import cv.terrasystem.zebratravelb.notification.NotificationService;
+import cv.terrasystem.zebratravelb.security.turnstile.TurnstileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -32,6 +33,7 @@ public class JobApplicationController {
 
     private final JobApplicationRepository repository;
     private final NotificationService notificationService;
+    private final TurnstileService turnstileService;
 
     @Value("${app.media.upload-dir}")
     private String uploadDir;
@@ -43,8 +45,10 @@ public class JobApplicationController {
             @RequestParam String email,
             @RequestParam String area,
             @RequestParam String description,
-            @RequestParam("cv") MultipartFile cv
+            @RequestParam("cv") MultipartFile cv,
+            @RequestParam String turnstileToken
     ) throws IOException {
+        turnstileService.verify(turnstileToken);
         if (name.isBlank() || phone.isBlank() || email.isBlank() || description.isBlank()) {
             throw new BadRequestException("Todos os campos são obrigatórios");
         }

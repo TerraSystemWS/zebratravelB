@@ -5,6 +5,7 @@ public record CreateContactMessageRequest(
         String email,
         String phone,
         String subject,
-        String message
+        String message,
+        String turnstileToken
 ) {
 }

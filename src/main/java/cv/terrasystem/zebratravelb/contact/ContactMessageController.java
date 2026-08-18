@@ -4,6 +4,7 @@ import cv.terrasystem.zebratravelb.common.BadRequestException;
 import cv.terrasystem.zebratravelb.common.NotFoundException;
 import cv.terrasystem.zebratravelb.notification.Notification;
 import cv.terrasystem.zebratravelb.notification.NotificationService;
+import cv.terrasystem.zebratravelb.security.turnstile.TurnstileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,7 @@ public class ContactMessageController {
 
     private final ContactMessageRepository repository;
     private final NotificationService notificationService;
+    private final TurnstileService turnstileService;
 
     // ResponseEntity.noContent() (204) em vez de "void" — um método void devolve 200 com corpo
     // vazio, e o cliente (zebratravel/lib/api.ts) tenta sempre fazer res.json() a não ser que o
@@ -30,6 +32,7 @@ public class ContactMessageController {
     // mensagem já ter sido gravada com sucesso.
     @PostMapping
     public ResponseEntity<Void> create(@RequestBody CreateContactMessageRequest request) {
+        turnstileService.verify(request.turnstileToken());
         if (request.name() == null || request.name().isBlank()) {
             throw new BadRequestException("Nome é obrigatório");
         }
